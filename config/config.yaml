@@ -1,0 +1,82 @@
+data:
+  root_dir: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus' # root path of train data (either relative/absolute path is ok)
+  wav_dir: 'wav16'
+  spect_dir: 'spect'
+  f0_norm_dir: 'f0_norm'
+  avg_speaker_embs_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_resnet_embs.pkl'
+  speaker_embs_gmm_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/vctk_resnet_emb_gmms.pkl'
+  seen_speakers_train_utts: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_train_utts.pkl'
+  seen_speakers_test_utts: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_test_utts.pkl'
+  f0_metadata_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
+#############################
+train:
+  num_workers: 8
+  num_gpus: 4
+  batch_size: 32
+  optimizer: 'adam'
+  seed: 1234
+  adam:
+    lr: 0.0001
+    beta1: 0.5
+    beta2: 0.9
+  stft_lamb: 2.5
+  use_gmm_emb: True
+  warp_lp: True
+  use_ssc: False
+#############################
+audio:
+  n_mel_channels: 80
+  f0_norm_dim: 257
+  spk_emb_dim: 512
+  spk_quant_f0_dim: 64
+  segment_length: 16384 # Should be multiple of 256
+  pad_short: 2000
+  filter_length: 1024
+  hop_length: 256 # WARNING: this can't be changed.
+  win_length: 1024
+  sampling_rate: 16000
+  mel_fmin: 0.0
+  mel_fmax: 8000.0
+#############################
+gen:
+  noise_dim: 64
+  channel_size: 16
+  dilations: [1, 3, 9, 27]
+  strides: [8, 8, 4]
+  lReLU_slope: 0.2
+  kpnet_conv_size: 3
+#############################
+ssc:
+  se:
+    spk_emb_dim: 512
+    num_filters: [16, 32, 64, 128]
+    layers: [3, 4, 6, 3]
+    pretrained_weight_path: "./weights/resnet34sel_pretrained.pt"
+  stft_lamb_final: 2.5
+  stft_annealing_step: 2000
+  pos_ssc_lamb: 0.9
+  neg_ssc_lamb: 0.0
+  ssc_annealing_step: 2000
+  num_ssc_samples: 8
+  finetune_epochs: 3
+#############################
+mpd:
+  periods: [2, 3, 5, 7, 11]
+  kernel_size: 5
+  stride: 3
+  use_spectral_norm: False
+  lReLU_slope: 0.2
+#############################
+mrd:
+  resolutions: "[(5, 25), (10, 50), (2, 10)]" # (hop_length_ms, win_length_ms)
+  use_spectral_norm: False
+  lReLU_slope: 0.2
+#############################
+log:
+  summary_interval: 10
+  validation_interval: 1
+  save_interval: 1
+  num_audio: 5
+  chkpt_dir: './chkpt'
+  log_dir: './logs'
+  ssc_validation_interval_steps: 400
