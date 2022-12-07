@@ -113,29 +113,29 @@ class Generator(nn.Module):
         for res_block in self.res_stack:
             res_block.remove_weight_norm()
 
-    def inference(self, c, z, s):
-        # Pad input mel with zeros to cut artifact at end of generated signal
-        # (see https://github.com/seungwonpark/melgan/issues/8).
-        zero = torch.full((1, self.content_feat_dim, 10), -11.5129).to(c.device)
-        mel = torch.cat((c, zero), dim=2)
+    # def inference(self, c, z, s):
+    #     # Pad input mel with zeros to cut artifact at end of generated signal
+    #     # (see https://github.com/seungwonpark/melgan/issues/8).
+    #     zero = torch.full((1, self.content_feat_dim, 10), -11.5129).to(c.device)
+    #     mel = torch.cat((c, zero), dim=2)
         
-        # Input noise sequence.
-        if z is None:
-            z = torch.randn(1, self.noise_dim, mel.size(2)).to(mel.device)
+    #     # Input noise sequence.
+    #     if z is None:
+    #         z = torch.randn(1, self.noise_dim, mel.size(2)).to(mel.device)
 
-        # Generate audio.
-        audio = self.forward(mel, z, s)
-        audio = audio.squeeze() # collapse all dimension except time axis
+    #     # Generate audio.
+    #     audio = self.forward(mel, z, s)
+    #     audio = audio.squeeze() # collapse all dimension except time axis
 
-        # Cut samples corresponding to earlier padding.
-        audio = audio[:-(self.hop_length*10)]
+    #     # Cut samples corresponding to earlier padding.
+    #     audio = audio[:-(self.hop_length*10)]
 
-        # Convert audio tensor to int16.
-        audio = MAX_WAV_VALUE * audio
-        audio = audio.clamp(min=-MAX_WAV_VALUE, max=MAX_WAV_VALUE-1)
-        audio = audio.short()
+    #     # Convert audio tensor to int16.
+    #     audio = MAX_WAV_VALUE * audio
+    #     audio = audio.clamp(min=-MAX_WAV_VALUE, max=MAX_WAV_VALUE-1)
+    #     audio = audio.short()
 
-        return audio
+    #     return audio
 
 if __name__ == '__main__':
     hp = OmegaConf.load('../config/config.yaml')
