@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, Dataset
 
 import sys
 sys.path.append('../')
-from utils.utils import load_and_resample, lowquef_lifter, get_f0_mean_std_representations
+from utils.utils import load_and_resample, lowquef_lifter, get_f0_median_std_representations
 from utils.perturbations import FrequencyWarp
 
 
@@ -82,7 +82,7 @@ class VCTK(Dataset):
 
         # Load pre-extracted F0 metadata (median, std dev) for each speaker.
         f0_metadata_pkl = pickle.load(open(self.hp.data.f0_metadata_file, "rb"))
-        self.f0_metadata = get_f0_mean_std_representations(f0_metadata_pkl)
+        self.f0_metadata = get_f0_median_std_representations(f0_metadata_pkl)
 
         # Segment length for all training samples.
         self.feat_segment_length = hp.audio.segment_length // hp.audio.hop_length
@@ -171,8 +171,8 @@ class VCTK(Dataset):
             speaker_emb = torch.tensor(self.avg_speaker_embeddings[speaker_id])
 
         # Combine all speaker features.
-        f0_mean = torch.from_numpy(self.f0_metadata[speaker_id]['mean'])
-        speaker_feat = torch.cat((speaker_emb, f0_mean), dim=0)
+        f0_median = torch.from_numpy(self.f0_metadata[speaker_id]['median'])
+        speaker_feat = torch.cat((speaker_emb, f0_median), dim=0)
 
         # Pad audio and corresponding features if utterance is too short.
         if len(audio) < self.hp.audio.segment_length + self.hp.audio.pad_short:

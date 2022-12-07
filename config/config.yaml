@@ -1,13 +1,13 @@
 data:
-  root_dir: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus' # root path of train data (either relative/absolute path is ok)
+  root_dir: 'data/VCTK-Corpus/VCTK-Corpus' # root path of train data (either relative/absolute path is ok)
   wav_dir: 'wav16'
   spect_dir: 'spect'
   f0_norm_dir: 'f0_norm'
-  avg_speaker_embs_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_resnet_embs.pkl'
-  speaker_embs_gmm_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/vctk_resnet_emb_gmms.pkl'
-  seen_speakers_train_utts: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_train_utts.pkl'
-  seen_speakers_test_utts: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_test_utts.pkl'
-  f0_metadata_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
+  avg_speaker_embs_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_resnet_embs.pkl'
+  speaker_embs_gmm_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/vctk_resnet_emb_gmms.pkl'
+  seen_speakers_train_utts: 'data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_train_utts.pkl'
+  seen_speakers_test_utts: 'data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_test_utts.pkl'
+  f0_metadata_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
 #############################
 train:
   num_workers: 8
@@ -77,6 +77,6 @@ log:
   validation_interval: 1
   save_interval: 1
   num_audio: 5
-  chkpt_dir: './chkpt'
-  log_dir: './logs'
+  chkpt_dir: 'chkpt'
+  log_dir: 'logs'
   ssc_validation_interval_steps: 400

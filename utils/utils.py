@@ -80,10 +80,14 @@ def quantize_f0_median(f0_median,
     median_one_hot = quantize(f0_median, bins, num_bins)
     return median_one_hot
 
-def get_f0_median_std_representations(f0_median_std_metadata,
-                                      log_fmin=np.log(librosa.note_to_hz('C2')),
-                                      log_fmax=np.log(librosa.note_to_hz('C5')),
-                                      std_min=0.05, std_max=0.35, num_bins=64):
+def get_f0_median_std_representations(
+        f0_median_std_metadata,
+        log_fmin=np.log(librosa.note_to_hz('C2')),
+        log_fmax=np.log(librosa.note_to_hz('C5')),
+        std_min=0.05,
+        std_max=0.35,
+        num_bins=64
+    ):
     
     median_bins = np.linspace(log_fmin, log_fmax, num_bins+1)
     std_bins = np.linspace(std_min, std_max, num_bins+1)
@@ -100,17 +104,6 @@ def get_f0_median_std_representations(f0_median_std_metadata,
                                                'std': std_one_hot}
     
     return f0_median_std_quantized
-
-def get_f0_warp_ratio_representation(linear_warp_ratio,
-                                     log_min=-1, # np.log2(0.5)
-                                     log_max=1, # np.log2(2.0)
-                                     num_bins=256):
-    
-    bins = np.linspace(log_min, log_max, num_bins+1)
-    log_warp_ratio = np.log2(linear_warp_ratio)
-
-    quantized_log_warp_ratio = quantize(log_warp_ratio, bins, num_bins)
-    return quantized_log_warp_ratio
 
 def rescale_power(source_wav, vc_wav):
     # Rescale the output.
