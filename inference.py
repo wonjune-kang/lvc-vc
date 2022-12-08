@@ -83,15 +83,9 @@ class LVC_VC_Inference():
             device='cpu'
         )
 
-    def extract_mel_spectrogram(self, wav):
-        wav = torch.from_numpy(wav).unsqueeze(0)
-        mel = self.stft.mel_spectrogram(wav)
-        mel = mel.squeeze(0).T.numpy()
-        return mel
-
     def extract_features(self, source_audio, target_audio):
         # Extract source utterance's mel spectrogram.
-        source_spect = self.extract_mel_spectrogram(source_audio).T
+        source_spect = extract_mel_spectrogram(source_audio, self.stft)
 
         # Low-quefrency liftering.
         lowquef_liftered = lowquef_lifter(source_spect)

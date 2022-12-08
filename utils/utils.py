@@ -3,6 +3,7 @@ import subprocess
 import numpy as np
 from scipy.fft import dct, idct
 import librosa
+import torch
 
 
 def get_commit_hash():
@@ -15,6 +16,12 @@ def load_and_resample(utterance_path, new_sr):
         y = librosa.resample(y, orig_sr=sr, target_sr=new_sr)
         y = np.clip(y, -1.0, 32767.0/32768.0)
     return y
+
+def extract_mel_spectrogram(wav, stft):
+    wav = torch.from_numpy(wav).unsqueeze(0)
+    mel = stft.mel_spectrogram(wav)
+    mel = mel.squeeze(0).numpy()
+    return mel
 
 def lowquef_lifter(mel, quef_order=20):
     mel_cepstrum = dct(mel, axis=0)
