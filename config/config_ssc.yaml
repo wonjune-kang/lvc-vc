@@ -2,12 +2,12 @@ data:
   root_dir: 'data/VCTK-Corpus/VCTK-Corpus' # root path of train data (either relative/absolute path is ok)
   wav_dir: 'wav16'
   spect_dir: 'spect'
-  f0_dir: 'f0_norm'
-  avg_speaker_embs_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_resnet_embs.pkl'
-  speaker_embs_gmm_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/vctk_resnet_emb_gmms.pkl'
+  f0_norm_dir: 'f0_norm'
+  avg_speaker_embs_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/avg_speaker_resnet_embs.pkl'
+  speaker_embs_gmm_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/resnet_emb_gmms.pkl'
   seen_speakers_train_utts: 'data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_train_utts.pkl'
   seen_speakers_test_utts: 'data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_test_utts.pkl'
-  f0_metadata_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_info.pkl'
+  f0_metadata_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
 #############################
 train:
   num_workers: 8

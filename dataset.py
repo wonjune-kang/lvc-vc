@@ -94,13 +94,13 @@ class VCTK(Dataset):
                 # Load mel-spectrogram.
                 # NOTE: Features were saved as (N, 80) for AutoVC, but need
                 # to be in (80, N) for UnivNet, so transpose when reading.
-                spect = np.load(os.path.join(self.spect_dir, relative_path)).T  # (80, N)
+                spect = np.load(os.path.join(self.spect_dir, f"{relative_path[:-4]}.npy"))  # (80, N)
                 
                 # Quantized normalized F0 contour.
-                f0_norm = np.load(os.path.join(self.f0_norm_dir, relative_path)).T  # (257, N)
+                f0_norm = np.load(os.path.join(self.f0_norm_dir, f"{relative_path[:-4]}.npy"))  # (257, N)
                 
                 # Raw time domain audio.
-                utt_wav_path = os.path.join(self.wav_dir, f"{relative_path[:-4]}.wav")
+                utt_wav_path = os.path.join(self.wav_dir, relative_path)
                 audio = load_and_resample(utt_wav_path, self.hp.audio.sampling_rate)
 
                 utterance_data = {
