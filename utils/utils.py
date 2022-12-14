@@ -112,6 +112,9 @@ def get_f0_median_std_representations(
     
     return f0_median_std_quantized
 
+def unnormalize_f0(norm_values, min, max):
+    return norm_values * (max - min) + min
+
 def rescale_power(source_wav, vc_wav):
     # Rescale the output.
     source_pow = np.sum(np.power(source_wav, 2.))
