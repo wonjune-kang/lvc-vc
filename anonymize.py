@@ -44,7 +44,7 @@ class LVC_VC_Anonymize(LVC_VC_Inference):
         target_embs = target_embs.astype(np.float32)
         return target_embs
 
-    def extract_features(self, source_audio, target_emb):
+    def extract_features_anon(self, source_audio, target_emb):
         # Extract source utterance's mel spectrogram.
         source_spect = extract_mel_spectrogram(source_audio, self.stft)
 
@@ -89,7 +89,7 @@ class LVC_VC_Anonymize(LVC_VC_Inference):
 
     def perform_anonymization(self, source_audio, target_emb):
         # Extract all features needed for conversion.
-        vc_features = self.extract_features(source_audio, target_emb)
+        vc_features = self.extract_features_anon(source_audio, target_emb)
 
         source_lq_spect = torch.from_numpy(vc_features['source_lq_spect']).unsqueeze(0)
         source_f0_norm = torch.from_numpy(vc_features['source_f0_norm']).unsqueeze(0)
