@@ -46,10 +46,11 @@ def load_lvc_vc(checkpoint_path, hp, device):
 
 class LVC_VC_Inference():
     def __init__(self,
-                 hp,
-                 lvc_vc_chkpt,
-                 speaker_encoder_chkpt,
-                 device):
+            hp,
+            lvc_vc_chkpt,
+            speaker_encoder_chkpt,
+            device
+        ):
 
         # Model hyperparameters.
         self.hp = hp
