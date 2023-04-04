@@ -40,8 +40,12 @@ def validate(hp, generator, discriminator,
         noise = torch.randn(1, hp.gen.noise_dim, spect.size(2)).to(device)
         vc_audio = generator(content_feature, noise, speaker_feat2)
 
-        recon_audio = recon_audio[:,:,:audio.size(2)]
-        vc_audio = vc_audio[:,:,:audio.size(2)]
+        # Crop all audio to be the length of the shortest signal (in case of
+        # slight mismatches when upsampling input noise sequence).
+        min_size = min(audio.size(2), recon_audio.size(2))
+        audio = audio[:,:,:min_size]
+        recon_audio = recon_audio[:,:,:min_size]
+        vc_audio = vc_audio[:,:,:min_size]
 
         # Compute mel spectrograms for reconstructed (fake) and real audio.
         spect_fake = stft.mel_spectrogram(recon_audio.squeeze(1))
