@@ -25,7 +25,8 @@ def stft(x, fft_size, hop_size, win_length, window):
         n_fft=fft_size,
         hop_length=hop_size,
         win_length=win_length,
-        window=window
+        window=window,
+        return_complex=False
     )
     real = x_stft[..., 0]
     imag = x_stft[..., 1]

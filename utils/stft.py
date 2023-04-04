@@ -81,7 +81,8 @@ class TacotronSTFT(torch.nn.Module):
             center=self.center,
             pad_mode='reflect',
             normalized=False,
-            onesided=True
+            onesided=True,
+            return_complex=False
         )
         spec = torch.norm(spec, p=2, dim=-1)
 
@@ -107,10 +108,18 @@ class TacotronSTFT(torch.nn.Module):
         y = y.squeeze(1)
 
         # Compute STFT and convert to magnitude spectrum.
-        spec = torch.stft(y, self.n_fft, hop_length=self.hop_size,
-                          win_length=self.win_size, window=self.hann_window,
-                          center=self.center, pad_mode='reflect',
-                          normalized=False, onesided=True)
+        spec = torch.stft(
+            y,
+            self.n_fft,
+            hop_length=self.hop_size,
+            win_length=self.win_size,
+            window=self.hann_window,
+            center=self.center,
+            pad_mode='reflect',
+            normalized=False,
+            onesided=True,
+            return_complex=False
+        )
 
         spec = torch.sqrt(spec.pow(2).sum(-1) + (1e-9))
 
