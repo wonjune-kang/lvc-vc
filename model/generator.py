@@ -12,7 +12,7 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         # Content feature is low-quefrency liftered mel spectrogram stacked
         # with normalized F0 contour.
-        self.content_feat_dim = hp.audio.n_mel_channels + hp.audio.f0_norm_dim
+        self.content_feat_dim = hp.audio.feat_dim + hp.audio.f0_norm_dim
 
         # Speaker feature is speaker embedding stacked with speaker's
         # quantized average f0 median.

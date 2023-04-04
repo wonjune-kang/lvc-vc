@@ -53,7 +53,7 @@ class VCTK(Dataset):
             self.avg_speaker_embeddings = pickle.load(open(hp.data.avg_speaker_embs_file, "rb"))
 
         # Paths to pre-extracted spectrograms and normalized F0 contours.
-        self.spect_dir = os.path.join(self.root_dir, hp.data.spect_dir)
+        self.feat_dir = os.path.join(self.root_dir, hp.data.feat_dir)
         self.f0_norm_dir = os.path.join(self.root_dir, hp.data.f0_norm_dir)
 
         # Load metadata on training or test utterances. Pickle files contain
@@ -62,7 +62,7 @@ class VCTK(Dataset):
             metadata = pickle.load(open(hp.data.seen_speakers_train_utts, "rb"))
         else:
             metadata = pickle.load(open(hp.data.seen_speakers_test_utts, "rb"))
-        metadata = {k: metadata[k] for k in list(metadata)[:5]} ### FOR DEBUGGING
+        # metadata = {k: metadata[k] for k in list(metadata)[:5]} ### FOR DEBUGGING
 
         # Load utterance data: speaker IDs, mel spectrograms, F0 contours, raw audio.
         self.data = self.load_metadata(metadata)
@@ -77,7 +77,7 @@ class VCTK(Dataset):
         if self.train:
             self.ssc_samples = self.hp.ssc.num_ssc_samples
         else:
-            # self.data = random.sample(self.data, 1000)
+            self.data = random.sample(self.data, 1000)
             self.ssc_samples = 1
 
         # Load pre-extracted F0 metadata (median, std dev) for each speaker.
@@ -85,16 +85,19 @@ class VCTK(Dataset):
         self.f0_metadata = get_f0_median_std_representations(f0_metadata_pkl)
 
         # Segment length for all training samples.
-        self.feat_segment_length = hp.audio.segment_length // hp.audio.hop_length
+        if self.hp.data.use_wav2vec:
+            self.feat_hop_length = hp.audio.wav2vec_hop_length
+        else:
+            self.feat_hop_length = hp.audio.hop_length
+        
+        self.feat_segment_length = hp.audio.segment_length // self.feat_hop_length
 
     def load_metadata(self, metadata):
         dataset = []
         for speaker_id, utterances in tqdm(metadata.items()):
             for relative_path in utterances:
-                # Load mel-spectrogram.
-                # NOTE: Features were saved as (N, 80) for AutoVC, but need
-                # to be in (80, N) for UnivNet, so transpose when reading.
-                spect = np.load(os.path.join(self.spect_dir, f"{relative_path[:-4]}.npy"))  # (80, N)
+                # Load main content feature.
+                spect = np.load(os.path.join(self.feat_dir, f"{relative_path[:-4]}.npy"))  # (feat_dim, N)
                 
                 # Quantized normalized F0 contour.
                 f0_norm = np.load(os.path.join(self.f0_norm_dir, f"{relative_path[:-4]}.npy"))  # (257, N)
@@ -123,7 +126,7 @@ class VCTK(Dataset):
         speaker_id1, audio1, spect1, speaker_feat1, f0_norm1 = self.get_utterance_data(utt_data)
 
         # Warp low-quefrency liftered spectrogram for training.
-        if self.train and self.hp.train.warp_lp:
+        if self.train and self.hp.train.warp_lq:
             lp_warp_ratio = np.random.uniform(0.85, 1.15)
             spect1 = self.frequency_warper.warp_spect_frequency(spect1, lp_warp_ratio)
 
@@ -179,7 +182,8 @@ class VCTK(Dataset):
             audio, spect, f0_norm = self.pad_audio_features(audio, spect, f0_norm)
 
         # Low-quefrency lifter original spectrogram to remove harmonics.
-        spect = lowquef_lifter(spect)
+        if self.hp.train.lq_lifter:
+            spect = lowquef_lifter(spect)
 
         # audio = torch.from_numpy(audio).unsqueeze(0)
         # feature = torch.from_numpy(feature)
@@ -191,8 +195,10 @@ class VCTK(Dataset):
             f0_norm = f0_norm[:, feat_start:feat_end]
 
             audio_len = self.hp.audio.segment_length
-            audio_start = feat_start * self.hp.audio.hop_length
+            audio_start = feat_start * self.feat_hop_length
             audio = audio[audio_start:audio_start + audio_len]
+        else:
+            f0_norm = f0_norm[:,:spect.shape[1]]
 
         return speaker_id, audio, spect, speaker_feat, f0_norm
 
@@ -208,7 +214,7 @@ class VCTK(Dataset):
         len_pad_samples = self.hp.audio.segment_length + self.hp.audio.pad_short - len(audio)
         audio = np.pad(audio, (0, len_pad_samples), mode='constant')
 
-        len_pad_frames = (len_pad_samples // self.hp.audio.hop_length) + 1
+        len_pad_frames = (len_pad_samples // self.feat_hop_length) + 1
         spect = np.pad(spect, ((0,0), (0,len_pad_frames)), mode='constant')
         
         # Need one-hot vector for F0 features, so make the index correspond
