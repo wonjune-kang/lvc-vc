@@ -44,7 +44,7 @@ audio:
 #############################
 gen:
   noise_dim: 50
-  channel_size: 16
+  channel_size: 32
   dilations: [1, 3, 9, 27]
   strides: [8, 8, 5]
   lReLU_slope: 0.2

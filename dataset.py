@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, Dataset
 import sys
 sys.path.append('../')
 from utils.utils import load_and_resample, lowquef_lifter, get_f0_median_std_representations
-from utils.perturbations import FrequencyWarp
+from utils.perturbations import *
 
 
 def create_dataloader(hp, train):
@@ -52,8 +52,7 @@ class VCTK(Dataset):
             # Load each speaker's pre-extracted average speaker embeddings.
             self.avg_speaker_embeddings = pickle.load(open(hp.data.avg_speaker_embs_file, "rb"))
 
-        # Paths to pre-extracted spectrograms and normalized F0 contours.
-        self.feat_dir = os.path.join(self.root_dir, hp.data.feat_dir)
+        # Paths to pre-extracted normalized F0 contours.
         self.f0_norm_dir = os.path.join(self.root_dir, hp.data.f0_norm_dir)
 
         # Load metadata on training or test utterances. Pickle files contain
@@ -64,7 +63,7 @@ class VCTK(Dataset):
             metadata = pickle.load(open(hp.data.seen_speakers_test_utts, "rb"))
         # metadata = {k: metadata[k] for k in list(metadata)[:5]} ### FOR DEBUGGING
 
-        # Load utterance data: speaker IDs, mel spectrograms, F0 contours, raw audio.
+        # Load utterance data: speaker IDs, F0 contours, raw audio.
         self.data = self.load_metadata(metadata)
 
         # Frequency warper for mel spectrograms.
@@ -92,13 +91,11 @@ class VCTK(Dataset):
         
         self.feat_segment_length = hp.audio.segment_length // self.feat_hop_length
 
+
     def load_metadata(self, metadata):
         dataset = []
         for speaker_id, utterances in tqdm(metadata.items()):
             for relative_path in utterances:
-                # Load main content feature.
-                spect = np.load(os.path.join(self.feat_dir, f"{relative_path[:-4]}.npy"))  # (feat_dim, N)
-                
                 # Quantized normalized F0 contour.
                 f0_norm = np.load(os.path.join(self.f0_norm_dir, f"{relative_path[:-4]}.npy"))  # (257, N)
                 
@@ -109,7 +106,6 @@ class VCTK(Dataset):
                 utterance_data = {
                     'speaker_id': speaker_id,
                     'relative_path': relative_path,
-                    'spect': spect,
                     'f0_norm': f0_norm,
                     'audio': audio
                 }
@@ -123,20 +119,20 @@ class VCTK(Dataset):
     def __getitem__(self, idx):
         # Get data for baseline utterance.
         utt_data = self.data[idx]
-        speaker_id1, audio1, spect1, speaker_feat1, f0_norm1 = self.get_utterance_data(utt_data)
+        speaker_id1, audio1, p_audio1, speaker_feat1, f0_norm1 = self.get_utterance_data(utt_data)
 
         # Warp low-quefrency liftered spectrogram for training.
         if self.train and self.hp.train.warp_lq:
             lp_warp_ratio = np.random.uniform(0.85, 1.15)
-            spect1 = self.frequency_warper.warp_spect_frequency(spect1, lp_warp_ratio)
+            feat1 = self.frequency_warper.warp_spect_frequency(feat1, lp_warp_ratio)
 
         audio1 = torch.from_numpy(audio1).unsqueeze(0)
-        spect1 = torch.from_numpy(spect1)
+        p_audio1 = torch.from_numpy(p_audio1)
         # speaker_feat1 = torch.tensor(speaker_feat1)
         f0_norm1 = torch.from_numpy(f0_norm1)
 
         audios = [audio1]
-        spects = [spect1]
+        p_audios = [p_audio1]
         speaker_feats = [speaker_feat1]
         f0_norms = [f0_norm1]
 
@@ -149,20 +145,22 @@ class VCTK(Dataset):
                     idx_new = random.randint(0, len(self.data)-1)
                     utt_data_new = self.data[idx_new]
                 
-                _, audio_new, spect_new, speaker_feat_new, f0_new = self.get_utterance_data(utt_data_new)
+                _, audio_new, p_audio_new, speaker_feat_new, f0_new = self.get_utterance_data(utt_data_new)
 
                 audios.append(audio_new)
-                spects.append(spect_new)
+                p_audios.append(p_audio_new)
                 speaker_feats.append(speaker_feat_new)
                 f0_norms.append(f0_new)
 
-        return audios, spects, speaker_feats, f0_norms
+        return audios, p_audios, speaker_feats, f0_norms
 
     def get_utterance_data(self, utt_data):
         speaker_id = utt_data['speaker_id']
         audio = utt_data['audio']
-        spect = utt_data['spect']
         f0_norm = utt_data['f0_norm']
+
+        # Perturb audio for wav2vec 2.0 features.
+        p_audio = self.perturb_audio(audio).astype(np.float32)
 
         # Get speaker embedding.
         if self.hp.train.use_gmm_emb:
@@ -179,47 +177,48 @@ class VCTK(Dataset):
 
         # Pad audio and corresponding features if utterance is too short.
         if len(audio) < self.hp.audio.segment_length + self.hp.audio.pad_short:
-            audio, spect, f0_norm = self.pad_audio_features(audio, spect, f0_norm)
-
-        # Low-quefrency lifter original spectrogram to remove harmonics.
-        if self.hp.train.lq_lifter:
-            spect = lowquef_lifter(spect)
-
-        # audio = torch.from_numpy(audio).unsqueeze(0)
-        # feature = torch.from_numpy(feature)
-        # f0 = torch.from_numpy(f0)
+            audio, f0_norm, len_pad_samples = self.pad_audio_features(audio, f0_norm)
+            p_audio = np.pad(p_audio, (0, len_pad_samples), mode='constant')
 
         # If training, crop all features to constant length.
         if self.train:
-            spect, feat_start, feat_end = self.crop_feature(spect)
-            f0_norm = f0_norm[:, feat_start:feat_end]
+            f0_norm, feat_start, feat_end = self.crop_feature(f0_norm)
 
-            audio_len = self.hp.audio.segment_length
             audio_start = feat_start * self.feat_hop_length
-            audio = audio[audio_start:audio_start + audio_len]
-        else:
-            f0_norm = f0_norm[:,:spect.shape[1]]
+            audio = audio[audio_start:audio_start + self.hp.audio.segment_length]
+            p_audio = p_audio[audio_start:audio_start + self.hp.audio.segment_length]
 
-        return speaker_id, audio, spect, speaker_feat, f0_norm
+        return speaker_id, audio, p_audio, speaker_feat, f0_norm
 
     def crop_feature(self, feature):
-        max_feat_start = feature.shape[1] - self.feat_segment_length - 1
+        max_feat_start = feature.shape[1] - self.feat_segment_length - 2
         feat_start = random.randint(0, max_feat_start)
         feat_end = feat_start + self.feat_segment_length
         feature = feature[:, feat_start:feat_end]
 
         return feature, feat_start, feat_end
 
-    def pad_audio_features(self, audio, spect, f0_norm):
+    def pad_audio_features(self, audio, f0_norm):
         len_pad_samples = self.hp.audio.segment_length + self.hp.audio.pad_short - len(audio)
         audio = np.pad(audio, (0, len_pad_samples), mode='constant')
 
         len_pad_frames = (len_pad_samples // self.feat_hop_length) + 1
-        spect = np.pad(spect, ((0,0), (0,len_pad_frames)), mode='constant')
         
         # Need one-hot vector for F0 features, so make the index correspond
         # to that of unvoiced frames (last index = 256).
         f0_norm = np.pad(f0_norm, ((0,0), (0,len_pad_frames)), mode='constant')
         f0_norm[-len_pad_frames:, -1] = 1
 
-        return audio, spect, f0_norm
+        return audio, f0_norm, len_pad_samples
+    
+    def perturb_audio(self, wav):
+        # Random frequency shaping via parametric equalizer (peq).
+        wav = torch.from_numpy(wav)
+        wav = peq(wav, self.hp.audio.sampling_rate).numpy()
+
+        # Formant and pitch shifting.
+        sound = wav_to_Sound(wav, sampling_frequency=self.hp.audio.sampling_rate)
+        sound = formant_and_pitch_shift(sound)
+        perturbed_wav = sound.values[0]
+        
+        return perturbed_wav
