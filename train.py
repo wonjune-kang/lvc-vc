@@ -2,12 +2,13 @@ import os
 import time
 import logging
 import math
+import itertools
 from tqdm import tqdm
 import torch
 import torch.nn as nn
-import itertools
+from transformers import Wav2Vec2ForPreTraining
 
-from dataset import create_dataloader as create_dataloader_vctk
+from dataset import create_dataloader
 from utils.writer import MyWriter
 from utils.stft import TacotronSTFT
 from utils.stft_loss import MultiResolutionSTFTLoss
@@ -46,9 +47,9 @@ def train(args, hp, hp_str):
     device = torch.device(f"cuda:{args.gpu_idx}" if torch.cuda.is_available() else "cpu")
 
     # Create train and validation dataloaders.
-    trainloader = create_dataloader_vctk(hp, True)
-    valloader = create_dataloader_vctk(hp, False)
-    
+    trainloader = create_dataloader(hp, True)
+    valloader = create_dataloader(hp, False)
+
     # Create STFT computation object.
     stft = TacotronSTFT(
         filter_length=hp.audio.filter_length,
@@ -61,6 +62,13 @@ def train(args, hp, hp_str):
         center=False,
         device=device
     )
+
+    # Initialize wav2vec 2.0 model for linguistic feature extraction.
+    wav2vec2 = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-xlsr-53").eval()
+    for param in wav2vec2.parameters():
+        param.requires_grad = False
+        param.grad = None
+    print("Loaded wav2vec 2.0.\n")
 
     # Initialize models and optimizers.
     model_g = Generator(hp)
@@ -121,10 +129,12 @@ def train(args, hp, hp_str):
             assert torch.cuda.device_count() >= hp.train.num_gpus
             model_g = nn.DataParallel(model_g, device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus)))
             model_d = nn.DataParallel(model_d, device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus)))
+            wav2vec2 = nn.DataParallel(wav2vec2, device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus)))
 
     # Send models to device.
     model_g = model_g.to(device)
     model_d = model_d.to(device)
+    wav2vec2 = wav2vec2.to(device)
 
     if hp.train.use_ssc:
         speaker_encoder = ResNetSE(SEBasicBlock,
@@ -168,24 +178,35 @@ def train(args, hp, hp_str):
 
         loader = tqdm(trainloader, desc='Loading train data')
 
-        for audios, spects, speaker_feats, f0_norms in loader:
-            
+        for audios, p_audios, speaker_feats, f0_norms in loader:
+
             # First item of each list of features is used for reconstruction.
-            spect = spects[0].to(device)
-            speaker_feat = speaker_feats[0].to(device)
             audio = audios[0].to(device)
+            p_audio = p_audios[0].to(device)
+            speaker_feat = speaker_feats[0].to(device)
             f0_norm = f0_norms[0].to(device)
+
+            # Extract wav2vec 2.0 features from perturbed audio.
+            with torch.no_grad():
+                wav2vec2_outputs = wav2vec2(p_audio, output_hidden_states=True)
+            wav2vec2_feat = wav2vec2_outputs.hidden_states[12] # (B, N, 1024)
+            wav2vec2_feat = wav2vec2_feat.permute((0,2,1)) # (B, 1024, N)
 
             #####################
             ##### Generator #####
             #####################
             optim_g.zero_grad()
 
-            # Input noise sequence.
-            noise = torch.randn(hp.train.batch_size, hp.gen.noise_dim, spect.size(2)).to(device)
-            content_feature = torch.cat((spect, f0_norm), dim=1)
-            
+            # Perform self-reconstruction of audio.
+            noise = torch.randn(hp.train.batch_size, hp.gen.noise_dim, wav2vec2_feat.size(2)).to(device)
+            content_feature = torch.cat((wav2vec2_feat, f0_norm), dim=1)
             fake_audio = model_g(content_feature, noise, speaker_feat)
+
+            # Crop all audio to be the length of the shortest signal (in case of
+            # slight mismatches when upsampling input noise sequence).
+            min_size = min(audio.size(2), fake_audio.size(2))
+            audio = audio[:,:,:min_size]
+            fake_audio = fake_audio[:,:,:min_size]
 
             # Compute Multi-Resolution STFT Loss.
             # (spectral convergence loss + log STFT magnitude loss)
@@ -285,7 +306,7 @@ def train(args, hp, hp_str):
 
             if hp.train.use_ssc and step % hp.log.ssc_validation_interval_steps == 0:
                 with torch.no_grad():
-                    validate(hp, model_g, model_d, valloader, stft, writer, step, device, ssc=True)
+                    validate(hp, model_g, model_d, wav2vec2, valloader, stft, writer, step, device, ssc=True)
                 
                 save_path = os.path.join(pt_dir, '%s_%04d_%d.pt' % (args.name, epoch, step))
                 torch.save({
@@ -305,7 +326,7 @@ def train(args, hp, hp_str):
         ######################
         if epoch % hp.log.validation_interval == 0:
             with torch.no_grad():
-                validate(hp, model_g, model_d, valloader, stft, writer, step, device)
+                validate(hp, model_g, model_d, wav2vec2, valloader, stft, writer, step, device)
 
         # Save model weights to checkpoint.
         if epoch % hp.log.save_interval == 0:

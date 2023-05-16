@@ -31,11 +31,11 @@ fmin = hp.audio.mel_fmin
 fmax = hp.audio.mel_fmax
 n_mels = hp.audio.n_mel_channels
 nfft = hp.audio.filter_length
-window_len = hp.audio.win_length
-hop_len = hp.audio.hop_length
+window_len = int(16000 * 0.025) # hp.audio.win_length
+hop_len = int(16000 * 0.02) # hp.audio.hop_length
 
 # Flags for which features to extract and save.
-extract_mel_flag = True
+extract_mel_flag = False
 extract_f0_flag = True
 
 # Create object for computing STFT and mel spectrograms.
@@ -52,7 +52,7 @@ stft = TacotronSTFT(
 )
 
 # Read all speakers' median and std F0 statistics.
-f0_metadata_file = '../data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
+f0_metadata_file = '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
 with open(f0_metadata_file, 'rb') as f:
     f0_median_std_info = pickle.load(f)
 
@@ -61,8 +61,10 @@ with open(f0_metadata_file, 'rb') as f:
 mismatched_utterances = []
 
 wav_dir = os.path.join('..', hp.data.root_dir, hp.data.wav_dir)
-spect_dir = os.path.join('..', hp.data.root_dir, hp.data.spect_dir)
-f0_norm_dir = os.path.join('..', hp.data.root_dir, hp.data.f0_norm_dir)
+# feat_dir = os.path.join('..', hp.data.root_dir, hp.data.feat_dir)
+# f0_norm_dir = os.path.join('..', hp.data.root_dir, hp.data.f0_norm_dir)
+feat_dir = os.path.join('..', hp.data.root_dir, 'wav2vec_xlsr53')
+f0_norm_dir = os.path.join('..', hp.data.root_dir, 'f0_norm_wav2vec')
 
 # Process all utterances from all speakers.
 speaker_ids = sorted(os.listdir(wav_dir))
@@ -73,7 +75,7 @@ for speaker_id in speaker_ids:
     speaker_wav_directory = os.path.join(wav_dir, speaker_id)
     
     # Create directories for storing utterance-wise speaker feature data.
-    speaker_spect_save_dir = os.path.join(spect_dir, speaker_id)
+    speaker_spect_save_dir = os.path.join(feat_dir, speaker_id)
     speaker_f0_save_dir = os.path.join(f0_norm_dir, speaker_id)
     os.makedirs(speaker_spect_save_dir, exist_ok=True)
     os.makedirs(speaker_f0_save_dir, exist_ok=True)
@@ -85,13 +87,14 @@ for speaker_id in speaker_ids:
         # Load time domain signal.
         y = load_and_resample(utt_file_path, fs)
 
-        # Compute mel spectrogram.
-        mel = extract_mel_spectrogram(y, stft)  # (80, N)
+        # # Compute mel spectrogram.
+        # feat = extract_mel_spectrogram(y, stft)  # (80, N)
+        feat = np.load(os.path.join(speaker_spect_save_dir, save_filename))
 
         # Save spectrogram.
         if extract_mel_flag:
             np.save(os.path.join(speaker_spect_save_dir, save_filename),
-                    mel.astype(np.float32), allow_pickle=False)
+                    feat.astype(np.float32), allow_pickle=False)
 
         # Save one-hot normalized log F0.
         if extract_f0_flag:
@@ -109,10 +112,10 @@ for speaker_id in speaker_ids:
                 hop_len
             ).T
             
-            if f0_norm.shape[1] == mel.shape[1] + 1:
-                f0_norm = f0_norm[:, :mel.shape[1]]  # (257, N)
+            if f0_norm.shape[1] == feat.shape[1] + 1:
+                f0_norm = f0_norm[:, :feat.shape[1]]  # (257, N)
             else:
-                mismatched_utterances.append((utt_file_path, mel.shape[0], f0_norm.shape[0]))
+                mismatched_utterances.append((utt_file_path, feat.shape[0], f0_norm.shape[0]))
 
             np.save(os.path.join(speaker_f0_save_dir, save_filename),
                     f0_norm.astype(np.float32), allow_pickle=False)
