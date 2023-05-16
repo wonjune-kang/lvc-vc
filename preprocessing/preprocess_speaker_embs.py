@@ -69,55 +69,51 @@ else:
 data_dir = "/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/wav16"
 speakers = os.listdir(data_dir)
 
-# We want to fit the GMMs only on the seen speakers' training utterances.
-train_utts_file = "/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_train_utts.pkl"
-seen_speaker_train_utts = pickle.load(open(train_utts_file, 'rb'))
-
+# # We want to fit the GMMs only on the seen speakers' training utterances.
+# train_utts_file = "/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_train_utts.pkl"
+# seen_speaker_train_utts = pickle.load(open(train_utts_file, 'rb'))
 
 # Extract speaker embeddings.
 avg_speaker_embs = {}
 resnet_emb_gmms = {}
 for speaker_id in tqdm(speakers):
-    try:
-        relative_utt_paths = seen_speaker_train_utts[speaker_id]
+    speaker_utt_path = os.path.join(data_dir, speaker_id)
+    relative_utt_paths = os.listdir(speaker_utt_path)
 
-        utt_embeddings = []
-        for utt in relative_utt_paths:
-            utt_path = os.path.join(data_dir, utt)
-            utt_audio, sr = torchaudio.load(utt_path)
-            utt_audio = utt_audio.to(device)
-            
-            if model_type == 0:
-                utt_emb = speaker_encoder(utt_audio).detach().cpu().squeeze().numpy()
-            elif model_type == 1:
-                utt_emb = speaker_encoder(utt_audio, aug=False).detach().cpu().squeeze().numpy()
-            else:
-                raise Exception("Invalid model type.")
-            
-            utt_embeddings.append(utt_emb)
+    utt_embeddings = []
+    for utt in relative_utt_paths:
+        utt_path = os.path.join(speaker_utt_path, utt)
+        utt_audio, sr = torchaudio.load(utt_path)
+        utt_audio = utt_audio.to(device)
         
-        utt_embeddings = np.stack(utt_embeddings)
+        if model_type == 0:
+            utt_emb = speaker_encoder(utt_audio).detach().cpu().squeeze().numpy()
+        elif model_type == 1:
+            utt_emb = speaker_encoder(utt_audio, aug=False).detach().cpu().squeeze().numpy()
+        else:
+            raise Exception("Invalid model type.")
         
-        gmm_dvector = mixture.GaussianMixture(n_components=1, covariance_type="diag")
-        gmm_dvector.fit(utt_embeddings)
-        
-        # Dictionary mapping from speaker IDs to (fixed) average speaker embeddings.
-        avg_speaker_embs[speaker_id] = np.mean(utt_embeddings, axis=0)
-
-        # Dictionary mapping from speaker IDs to 1 component GMMs fit on the
-        # speaker embeddings.
-        resnet_emb_gmms[speaker_id] = gmm_dvector
+        utt_embeddings.append(utt_emb)
     
-    except KeyError:
-        pass
+    utt_embeddings = np.stack(utt_embeddings)
+    
+    gmm_dvector = mixture.GaussianMixture(n_components=1, covariance_type="diag")
+    gmm_dvector.fit(utt_embeddings)
+    
+    # Dictionary mapping from speaker IDs to (fixed) average speaker embeddings.
+    avg_speaker_embs[speaker_id] = np.mean(utt_embeddings, axis=0)
+
+    # Dictionary mapping from speaker IDs to 1 component GMMs fit on the
+    # speaker embeddings.
+    resnet_emb_gmms[speaker_id] = gmm_dvector
 
 # Save pickle files.
-avg_emb_pickle_file = "/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/ecapa_tdnn_avg_embs.pkl"
+avg_emb_pickle_file = "/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/ecapa_tdnn_avg_embs_all.pkl"
 with open(avg_emb_pickle_file, 'wb') as f:
     pickle.dump(avg_speaker_embs, f)
     print(f"Average speaker embedding saved to {avg_emb_pickle_file}.")
 
-emb_gmm_pickle_file = "/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/ecapa_tdnn_emb_gmms.pkl"
+emb_gmm_pickle_file = "/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/ecapa_tdnn_emb_gmms_all.pkl"
 with open(emb_gmm_pickle_file, 'wb') as f:
     pickle.dump(resnet_emb_gmms, f)
     print(f"Speaker embedding Gaussians saved to {emb_gmm_pickle_file}.")
