@@ -13,7 +13,7 @@ def validate(hp, generator, discriminator, wav2vec2, valloader, stft,
 
     loader = tqdm.tqdm(valloader, desc='Validation loop')
     mel_loss = 0.0
-    for idx, (audios, _, speaker_feats, f0_norms) in enumerate(loader):
+    for idx, (audios, _, spects, speaker_feats, f0_norms) in enumerate(loader):
         
         if ssc and idx == hp.log.num_audio:
             return
@@ -29,24 +29,30 @@ def validate(hp, generator, discriminator, wav2vec2, valloader, stft,
         speaker_feat2 = speaker_feat2.to(device)
 
         # Extract wav2vec 2.0 features from audio.
-        wav2vec2_outputs = wav2vec2(audio.squeeze(1), output_hidden_states=True)
-        wav2vec2_feat = wav2vec2_outputs.hidden_states[12] # (B, N, 1024)
-        wav2vec2_feat = wav2vec2_feat.permute((0,2,1)) # (B, 1024, N)
+        if hp.train.use_wav2vec:
+            wav2vec2_outputs = wav2vec2(audio.squeeze(1), output_hidden_states=True)
+            feat = wav2vec2_outputs.hidden_states[12] # (B, N, 1024)
+            feat = feat.permute((0,2,1)) # (B, 1024, N)
 
-        # Crop wav2vec2_feat or f0_norm to match shorter feature (they may be
-        # off by 1 or 2 because of slight mismatches in frame-wise processing).
-        min_feat_len = min(wav2vec2_feat.size(2), f0_norm.size(2))
-        wav2vec2_feat = wav2vec2_feat[:,:,:min_feat_len]
-        f0_norm = f0_norm[:,:,:min_feat_len]
+            # Crop feat or f0_norm to match shorter feature (they may be
+            # off by 1 or 2 because of slight mismatches in frame-wise processing).
+            min_feat_len = min(feat.size(2), f0_norm.size(2))
+            feat = feat[:,:,:min_feat_len]
+            f0_norm = f0_norm[:,:,:min_feat_len]
+        
+        # Or use low-quefrency liftered mel spectrogram.
+        else:
+            feat, _ = spects
+            feat = feat.to(device)
 
         # Generate fake audio for reconstruction.
-        noise = torch.randn(1, hp.gen.noise_dim, wav2vec2_feat.size(2)).to(device)
-        content_feature = torch.cat((wav2vec2_feat, f0_norm), dim=1)
+        noise = torch.randn(1, hp.gen.noise_dim, feat.size(2)).to(device)
+        content_feature = torch.cat((feat, f0_norm), dim=1)
 
         recon_audio = generator(content_feature, noise, speaker_feat)
 
         # Generate voice converted audio.
-        noise = torch.randn(1, hp.gen.noise_dim, wav2vec2_feat.size(2)).to(device)
+        noise = torch.randn(1, hp.gen.noise_dim, feat.size(2)).to(device)
         vc_audio = generator(content_feature, noise, speaker_feat2)
 
         # Crop all audio to be the length of the shortest signal (in case of

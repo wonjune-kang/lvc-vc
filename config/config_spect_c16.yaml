@@ -1,17 +1,17 @@
 data:
   root_dir: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus' # root path of train data (either relative/absolute path is ok)
   wav_dir: 'wav16'
-  feat_dir: 'spect'
+  spect_dir: 'spect'
   f0_norm_dir: 'f0_norm'
-  avg_speaker_embs_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/avg_speaker_resnet_embs.pkl'
-  speaker_embs_gmm_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/resnet_emb_gmms.pkl'
-  seen_speakers_train_utts: 'data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_train_utts.pkl'
-  seen_speakers_test_utts: 'data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_test_utts.pkl'
-  f0_metadata_file: 'data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
+  avg_speaker_embs_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/fast_resnet34_avg_embs.pkl'
+  speaker_embs_gmm_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/fast_resnet34_emb_gmms.pkl'
+  seen_speakers_train_utts: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_train_utts.pkl'
+  seen_speakers_test_utts: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_test_utts.pkl'
+  f0_metadata_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
 #############################
 train:
   num_workers: 8
-  num_gpus: 4
+  num_gpus: 1
   batch_size: 32
   optimizer: 'adam'
   seed: 1234
@@ -20,6 +20,7 @@ train:
     beta1: 0.5
     beta2: 0.9
   stft_lamb: 2.5
+  use_wav2vec: False
   use_gmm_emb: True
   warp_lq: True
   use_ssc: False
@@ -35,6 +36,7 @@ audio:
   filter_length: 1024
   hop_length: 256 # WARNING: this can't be changed.
   win_length: 1024
+  wav2vec_hop_length: None
   sampling_rate: 16000
   mel_fmin: 0.0
   mel_fmax: 8000.0
@@ -53,7 +55,6 @@ ssc:
     num_filters: [16, 32, 64, 128]
     layers: [3, 4, 6, 3]
     pretrained_weight_path: "./weights/resnet34sel_pretrained.pt"
-  stft_lamb_final: 2.5
   stft_annealing_step: 2000
   pos_ssc_lamb: 0.9
   neg_ssc_lamb: 0.0

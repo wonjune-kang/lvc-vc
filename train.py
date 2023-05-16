@@ -64,11 +64,14 @@ def train(args, hp, hp_str):
     )
 
     # Initialize wav2vec 2.0 model for linguistic feature extraction.
-    wav2vec2 = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-xlsr-53").eval()
-    for param in wav2vec2.parameters():
-        param.requires_grad = False
-        param.grad = None
-    print("Loaded wav2vec 2.0.\n")
+    if hp.train.use_wav2vec:
+        wav2vec2 = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-xlsr-53").eval()
+        for param in wav2vec2.parameters():
+            param.requires_grad = False
+            param.grad = None
+        print("Loaded wav2vec 2.0.\n")
+    else:
+        wav2vec2 = None
 
     # Initialize models and optimizers.
     model_g = Generator(hp)
@@ -129,12 +132,14 @@ def train(args, hp, hp_str):
             assert torch.cuda.device_count() >= hp.train.num_gpus
             model_g = nn.DataParallel(model_g, device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus)))
             model_d = nn.DataParallel(model_d, device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus)))
-            wav2vec2 = nn.DataParallel(wav2vec2, device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus)))
+            if hp.train.use_wav2vec:
+                wav2vec2 = nn.DataParallel(wav2vec2, device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus)))
 
     # Send models to device.
     model_g = model_g.to(device)
     model_d = model_d.to(device)
-    wav2vec2 = wav2vec2.to(device)
+    if hp.train.use_wav2vec:
+        wav2vec2 = wav2vec2.to(device)
 
     if hp.train.use_ssc:
         speaker_encoder = ResNetSE(SEBasicBlock,
@@ -178,19 +183,24 @@ def train(args, hp, hp_str):
 
         loader = tqdm(trainloader, desc='Loading train data')
 
-        for audios, p_audios, speaker_feats, f0_norms in loader:
+        for audios, perturbed_audios, spects, speaker_feats, f0_norms in loader:
 
             # First item of each list of features is used for reconstruction.
             audio = audios[0].to(device)
-            p_audio = p_audios[0].to(device)
             speaker_feat = speaker_feats[0].to(device)
             f0_norm = f0_norms[0].to(device)
 
             # Extract wav2vec 2.0 features from perturbed audio.
-            with torch.no_grad():
-                wav2vec2_outputs = wav2vec2(p_audio, output_hidden_states=True)
-            wav2vec2_feat = wav2vec2_outputs.hidden_states[12] # (B, N, 1024)
-            wav2vec2_feat = wav2vec2_feat.permute((0,2,1)) # (B, 1024, N)
+            if hp.train.use_wav2vec:
+                perturbed_audio = perturbed_audios[0].to(device)
+                with torch.no_grad():
+                    wav2vec2_outputs = wav2vec2(perturbed_audio, output_hidden_states=True)
+                feat = wav2vec2_outputs.hidden_states[12] # (B, N, 1024)
+                feat = feat.permute((0,2,1)) # (B, 1024, N)
+            
+            # Or use low-quefrency liftered mel spectrogram.
+            else:
+                feat = spects[0].to(device) # (B, 80, N)
 
             #####################
             ##### Generator #####
@@ -198,8 +208,8 @@ def train(args, hp, hp_str):
             optim_g.zero_grad()
 
             # Perform self-reconstruction of audio.
-            noise = torch.randn(hp.train.batch_size, hp.gen.noise_dim, wav2vec2_feat.size(2)).to(device)
-            content_feature = torch.cat((wav2vec2_feat, f0_norm), dim=1)
+            noise = torch.randn(hp.train.batch_size, hp.gen.noise_dim, feat.size(2)).to(device)
+            content_feature = torch.cat((feat, f0_norm), dim=1)
             fake_audio = model_g(content_feature, noise, speaker_feat)
 
             # Crop all audio to be the length of the shortest signal (in case of
@@ -229,6 +239,8 @@ def train(args, hp, hp_str):
             # Overall generator loss (L_G).
             loss_g = score_loss + stft_loss
 
+            # We only use SSC loss if training using low-quefrency liftered
+            # spectrograms.
             if hp.train.use_ssc:
                 # Use the last utterance in the list as the target speaker.
                 vc_target_speaker_feat = speaker_feats[-1].to(device)
@@ -239,14 +251,10 @@ def train(args, hp, hp_str):
                     source_spect = spects[i].to(device)
                     source_f0_norm = f0_norms[i].to(device)
 
-                    if hp.data.combine_feats:
-                        content_feature = torch.cat((source_spect, source_f0_norm), dim=1)
-                    else:
-                        content_feature = source_spect
-
+                    content_feature = torch.cat((source_spect, source_f0_norm), dim=1)
                     noise = torch.randn(hp.train.batch_size, hp.gen.noise_dim, source_spect.size(2)).to(device)
-                    fake_ssc_audio = model_g(content_feature, noise, vc_target_speaker_feat).squeeze(1)
 
+                    fake_ssc_audio = model_g(content_feature, noise, vc_target_speaker_feat).squeeze(1)
                     fake_ssc_audios.append(fake_ssc_audio)
 
                 pos_ssc_loss, neg_ssc_loss = ssc_criterion(fake_ssc_audios, src_audios, vc_target_speaker_feat[:,:hp.ssc.se.spk_emb_dim])

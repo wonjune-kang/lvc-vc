@@ -1,14 +1,13 @@
 data:
   root_dir: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus' # root path of train data (either relative/absolute path is ok)
   wav_dir: 'wav16'
-  feat_dir: 'wav2vec_xlsr53'
+  spect_dir: None
   f0_norm_dir: 'f0_norm_wav2vec'
   avg_speaker_embs_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/ecapa_tdnn_avg_embs.pkl'
   speaker_embs_gmm_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/ecapa_tdnn_emb_gmms.pkl'
   seen_speakers_train_utts: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_train_utts.pkl'
   seen_speakers_test_utts: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_test_utts.pkl'
   f0_metadata_file: '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
-  use_wav2vec: True
 #############################
 train:
   num_workers: 8
@@ -21,8 +20,8 @@ train:
     beta1: 0.5
     beta2: 0.9
   stft_lamb: 2.5
+  use_wav2vec: True
   use_gmm_emb: True
-  lq_lifter: False
   warp_lq: False
   use_ssc: False
 #############################
@@ -56,7 +55,6 @@ ssc:
     num_filters: [16, 32, 64, 128]
     layers: [3, 4, 6, 3]
     pretrained_weight_path: "./weights/resnet34sel_pretrained.pt"
-  stft_lamb_final: 2.5
   stft_annealing_step: 2000
   pos_ssc_lamb: 0.9
   neg_ssc_lamb: 0.0
