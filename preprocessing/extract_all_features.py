@@ -22,7 +22,7 @@ def get_speaker_utterance_paths(speaker_base_path):
     return all_utterance_paths
 
 
-config = '../config/config.yaml'
+config = '../config/config_wav2vec_ecapa_c32.yaml'
 hp = OmegaConf.load(config)
 
 # Define hyperparameters.
@@ -31,25 +31,35 @@ fmin = hp.audio.mel_fmin
 fmax = hp.audio.mel_fmax
 n_mels = hp.audio.n_mel_channels
 nfft = hp.audio.filter_length
-window_len = int(16000 * 0.025) # hp.audio.win_length
-hop_len = int(16000 * 0.02) # hp.audio.hop_length
 
-# Flags for which features to extract and save.
-extract_mel_flag = False
-extract_f0_flag = True
+if hp.train.use_wav2vec:
+    # Wav2vec 2.0 features are extracted with 25 ms window length and 20 ms hop.
+    window_len = int(16000 * 0.025)
+    hop_len = int(16000 * 0.02)
 
-# Create object for computing STFT and mel spectrograms.
-stft = TacotronSTFT(
-    nfft,
-    hop_len,
-    window_len,
-    n_mels,
-    fs,
-    fmin,
-    fmax,
-    center=False,
-    device='cpu'
-)
+    # If using wav2vec features, we don't need to extract mel spectrograms.
+    extract_mel_flag = False
+
+else:
+    # Use spectrogram configurations.
+    window_len = hp.audio.win_length
+    hop_len = hp.audio.hop_length
+
+    # If using wav2vec features, we don't need to extract mel spectrograms.
+    extract_mel_flag = True
+
+    # Create object for computing STFT and mel spectrograms.
+    stft = TacotronSTFT(
+        nfft,
+        hop_len,
+        window_len,
+        n_mels,
+        fs,
+        fmin,
+        fmax,
+        center=False,
+        device='cpu'
+    )
 
 # Read all speakers' median and std F0 statistics.
 f0_metadata_file = '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
@@ -61,10 +71,8 @@ with open(f0_metadata_file, 'rb') as f:
 mismatched_utterances = []
 
 wav_dir = os.path.join('..', hp.data.root_dir, hp.data.wav_dir)
-# feat_dir = os.path.join('..', hp.data.root_dir, hp.data.feat_dir)
-# f0_norm_dir = os.path.join('..', hp.data.root_dir, hp.data.f0_norm_dir)
-feat_dir = os.path.join('..', hp.data.root_dir, 'wav2vec_xlsr53')
-f0_norm_dir = os.path.join('..', hp.data.root_dir, 'f0_norm_wav2vec')
+spect_dir = os.path.join('..', hp.data.root_dir, 'spect')
+f0_norm_dir = os.path.join('..', hp.data.root_dir, hp.data.f0_norm_dir)
 
 # Process all utterances from all speakers.
 speaker_ids = sorted(os.listdir(wav_dir))
@@ -75,7 +83,7 @@ for speaker_id in speaker_ids:
     speaker_wav_directory = os.path.join(wav_dir, speaker_id)
     
     # Create directories for storing utterance-wise speaker feature data.
-    speaker_spect_save_dir = os.path.join(feat_dir, speaker_id)
+    speaker_spect_save_dir = os.path.join(spect_dir, speaker_id)
     speaker_f0_save_dir = os.path.join(f0_norm_dir, speaker_id)
     os.makedirs(speaker_spect_save_dir, exist_ok=True)
     os.makedirs(speaker_f0_save_dir, exist_ok=True)
@@ -87,39 +95,24 @@ for speaker_id in speaker_ids:
         # Load time domain signal.
         y = load_and_resample(utt_file_path, fs)
 
-        # # Compute mel spectrogram.
-        # feat = extract_mel_spectrogram(y, stft)  # (80, N)
-        feat = np.load(os.path.join(speaker_spect_save_dir, save_filename))
-
-        # Save spectrogram.
+        # Compute and save mel spectrogram.
         if extract_mel_flag:
+            spect = extract_mel_spectrogram(y, stft)  # (80, N)
             np.save(os.path.join(speaker_spect_save_dir, save_filename),
-                    feat.astype(np.float32), allow_pickle=False)
+                    spect.astype(np.float32), allow_pickle=False)
 
         # Save one-hot normalized log F0.
-        if extract_f0_flag:
-            # Get F0 median and std dev info for current speaker.
-            f0_median = f0_median_std_info[speaker_id]['median']
-            f0_std = f0_median_std_info[speaker_id]['std']
+        # Get F0 median and std dev info for current speaker.
+        f0_median = f0_median_std_info[speaker_id]['median']
+        f0_std = f0_median_std_info[speaker_id]['std']
 
-            # Get one-hot representations for normalized log F0 contour.
-            f0_norm = get_f0_norm(
-                y,
-                f0_median,
-                f0_std,
-                fs,
-                window_len,
-                hop_len
-            ).T
-            
-            if f0_norm.shape[1] == feat.shape[1] + 1:
-                f0_norm = f0_norm[:, :feat.shape[1]]  # (257, N)
-            else:
-                mismatched_utterances.append((utt_file_path, feat.shape[0], f0_norm.shape[0]))
+        # Get one-hot representations for normalized log F0 contour.
+        f0_norm = get_f0_norm(y, f0_median, f0_std, fs, window_len, hop_len).T
+        
+        if f0_norm.shape[1] == spect.shape[1] + 1:
+            f0_norm = f0_norm[:, :spect.shape[1]]  # (257, N)
+        else:
+            mismatched_utterances.append((utt_file_path, spect.shape[0], f0_norm.shape[0]))
 
-            np.save(os.path.join(speaker_f0_save_dir, save_filename),
-                    f0_norm.astype(np.float32), allow_pickle=False)
-
-
-if extract_f0_flag:
-    print(mismatched_utterances)
+        np.save(os.path.join(speaker_f0_save_dir, save_filename),
+                f0_norm.astype(np.float32), allow_pickle=False)

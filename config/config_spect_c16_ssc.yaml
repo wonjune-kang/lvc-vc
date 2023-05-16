@@ -31,10 +31,10 @@ audio:
   f0_norm_dim: 257
   spk_emb_dim: 512
   spk_quant_f0_dim: 64
-  segment_length: 16384 # Should be multiple of 256
+  segment_length: 16384
   pad_short: 2000
   filter_length: 1024
-  hop_length: 256 # WARNING: this can't be changed.
+  hop_length: 256
   win_length: 1024
   wav2vec_hop_length: None
   sampling_rate: 16000

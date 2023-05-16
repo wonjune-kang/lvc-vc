@@ -63,7 +63,8 @@ def process_all_speaker_f0(speaker_directory, fs, window, hop, voiced_prob_cutof
     return all_speaker_f0_info
 
 
-config = '../config/config.yaml'
+# Specify config file.
+config = '../config/config_wav2vec_ecapa_c32.yaml'
 hp = OmegaConf.load(config)
 
 # Directories for reading audio data and saving extracted F0 information.
