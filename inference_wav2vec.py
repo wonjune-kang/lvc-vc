@@ -95,7 +95,7 @@ class LVC_VC_Inference():
         
         return perturbed_wav.astype(np.float32)
 
-    def extract_features(self, source_audio, target_audio):
+    def extract_features(self, source_audio, target_audio, source_seen, target_seen, source_id, target_id):
         source_audio_tensor = torch.from_numpy(source_audio).unsqueeze(0).to(self.device)
         target_audio_tensor = torch.from_numpy(target_audio).unsqueeze(0).to(self.device)
 
@@ -106,16 +106,17 @@ class LVC_VC_Inference():
             wav2vec2_feat = wav2vec2_feat.permute((0,2,1)) # (1, 1024, N)
             wav2vec2_feat = wav2vec2_feat.detach().squeeze().cpu().numpy() # (1024, N)
 
-            # Extract target speaker's speaker embedding.
-            target_emb = self.speaker_encoder(target_audio_tensor, aug=False).detach().squeeze().cpu().numpy()
-
         # Extract source utterance's normalized F0 contour.
-        src_f0_median, src_f0_std = extract_f0_median_std(
-            source_audio,
-            self.fs,
-            self.win_length,
-            self.hop_length
-        )
+        if source_seen:
+            src_f0_median = self.seen_speaker_f0_metadata[source_id]['median']
+            src_f0_std = self.seen_speaker_f0_metadata[source_id]['std']
+        else:
+            src_f0_median, src_f0_std = extract_f0_median_std(
+                source_audio,
+                self.fs,
+                self.win_length,
+                self.hop_length
+            )
         f0_norm = get_f0_norm(
             source_audio,
             src_f0_median,
@@ -128,13 +129,22 @@ class LVC_VC_Inference():
         # Transpose to make (257, N) and crop at end to match wav2vec features.
         f0_norm = f0_norm.T[:,:wav2vec2_feat.shape[1]].astype(np.float32)
 
+        # Extract target speaker's speaker embedding.
+        if target_seen:
+            target_emb = self.seen_speaker_emb_gmms[target_id].means_.astype(np.float32)[0,:]
+        else:
+            target_emb = self.speaker_encoder(target_audio_tensor, aug=False).detach().squeeze().cpu().numpy()
+
         # Extract target speaker's quantized median F0.
-        target_f0_median, _ = extract_f0_median_std(
-            target_audio,
-            self.fs,
-            self.win_length,
-            self.hop_length
-        )
+        if target_seen:
+            target_f0_median = self.seen_speaker_f0_metadata[target_id]['median']
+        else:
+            target_f0_median, _ = extract_f0_median_std(
+                target_audio,
+                self.fs,
+                self.win_length,
+                self.hop_length
+            )
         target_f0_median = quantize_f0_median(target_f0_median).astype(np.float32)
 
         # Store all features in dictionary.
@@ -147,79 +157,16 @@ class LVC_VC_Inference():
 
         return vc_features
     
-    def run_inference(self, source_audio, target_audio):
+    def run_inference(self, source_audio, target_audio, source_seen, target_seen, source_id, target_id):
         # Extract all features needed for conversion.
-        vc_features = self.extract_features(source_audio, target_audio)
-
-        source_wav2vec2_feat = torch.from_numpy(vc_features['wav2vec2_feat']).unsqueeze(0)
-        source_f0_norm = torch.from_numpy(vc_features['source_f0_norm']).unsqueeze(0)
-        target_emb = torch.from_numpy(vc_features['target_emb']).unsqueeze(0)
-        target_f0_median = torch.from_numpy(vc_features['target_f0_median']).unsqueeze(0)
-
-        # Concatenate features to feed into model.
-        noise = torch.randn(1, self.hp.gen.noise_dim, source_wav2vec2_feat.size(2)).to(self.device)
-        content_feature = torch.cat((source_wav2vec2_feat, source_f0_norm), dim=1).to(self.device)
-        speaker_feature = torch.cat((target_emb, target_f0_median), dim=1).to(self.device)
-        
-        # Perform conversion and rescale power to match source.
-        vc_audio = self.lvc_vc(content_feature, noise, speaker_feature).detach().squeeze().cpu().numpy()
-        # vc_audio = rescale_power(source_audio, vc_audio)
-
-        return vc_audio
-
-    def extract_features_seen_target(self, source_audio, target_speaker_id):
-        source_audio_tensor = torch.from_numpy(source_audio).unsqueeze(0).to(self.device)
-
-        with torch.no_grad():
-            # Extract wav2vec 2.0 features.
-            wav2vec2_outputs = self.wav2vec2(source_audio_tensor, output_hidden_states=True)
-            wav2vec2_feat = wav2vec2_outputs.hidden_states[12] # (1, N, 1024)
-            wav2vec2_feat = wav2vec2_feat.permute((0,2,1)) # (1, 1024, N)
-            wav2vec2_feat = wav2vec2_feat.detach().squeeze().cpu().numpy() # (1024, N)
-
-        # Extract source utterance's normalized F0 contour.
-        src_f0_median, src_f0_std = extract_f0_median_std(
+        vc_features = self.extract_features(
             source_audio,
-            self.fs,
-            self.win_length,
-            self.hop_length,
-            rescale_before=False
+            target_audio,
+            source_seen,
+            target_seen,
+            source_id,
+            target_id
         )
-        f0_norm = get_f0_norm(
-            source_audio,
-            src_f0_median,
-            src_f0_std,
-            self.fs,
-            int(16000*0.025), # frame length of wav2vec 2.0
-            int(16000*0.02), # hop length of wav2vec 2.0
-            rescale_before=False
-        )
-
-        # Transpose to make (257, N) and crop at end to match spectrogram.
-        f0_norm = f0_norm.T[:,:wav2vec2_feat.shape[1]].astype(np.float32)
-
-        # Get target speaker's quantized median F0.
-        target_f0_median = self.seen_speaker_f0_metadata[target_speaker_id]['median']
-        target_f0_median = quantize_f0_median(target_f0_median).astype(np.float32)
-        
-        # Get target speaker's speaker embedding.
-        # target_emb = self.seen_speaker_emb_gmms[target_speaker_id].means_.astype(np.float32)[0,:]
-        target_emb, _ = self.seen_speaker_emb_gmms[target_speaker_id].sample(1)
-        target_emb = target_emb[0,:].astype(np.float32)
-        
-        # Store all features in dictionary.
-        vc_features = {
-            'wav2vec2_feat': wav2vec2_feat,
-            'source_f0_norm': f0_norm,
-            'target_emb': target_emb,
-            'target_f0_median': target_f0_median
-        }
-
-        return vc_features
-
-    def run_inference_seen_target(self, source_audio, target_speaker_id):
-        # Extract all features needed for conversion.
-        vc_features = self.extract_features_seen_target(source_audio, target_speaker_id)
 
         source_wav2vec2_feat = torch.from_numpy(vc_features['wav2vec2_feat']).unsqueeze(0)
         source_f0_norm = torch.from_numpy(vc_features['source_f0_norm']).unsqueeze(0)
@@ -262,10 +209,12 @@ if __name__ == '__main__':
     # Set up LVC-VC inferencer.
     hp = OmegaConf.load(args.config)
     lvc_vc_inferencer = LVC_VC_Inference(
-        hp,
-        args.lvc_vc_weights,
-        args.se_weights,
-        device
+        hp=hp,
+        lvc_vc_chkpt=args.lvc_vc_weights,
+        speaker_encoder_chkpt=args.se_weights,
+        seen_speaker_emb_gmms_pkl='/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/ecapa_tdnn_emb_gmms_all.pkl',
+        seen_speaker_f0_metadata_pkl='/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata_orig/speaker_f0_metadata.pkl',
+        device=device
     )
 
     # Load source and target audio for conversion.
