@@ -189,9 +189,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str, default="config/config.yaml",
                         help="yaml file for configuration")
-    parser.add_argument('-p', '--lvc_vc_weights', type=str, default="weights/lvc_vc_vctk.pt",
+    parser.add_argument('-p', '--lvc_vc_weights', type=str, default="weights/lvc_vc_wav2vec_ecapa.pt",
                         help="path to LVC-VC model weights")
-    parser.add_argument('-e', '--se_weights', type=str, default="weights/resnet34sel_pretrained.pt",
+    parser.add_argument('-e', '--se_weights', type=str, default="weights/ecapa_tdnn_pretrained.pt",
                         help="path to speaker encoder model weights")
     parser.add_argument('-g', '--gpu_idx', type=int, default=0,
                         help="index of home GPU device")
