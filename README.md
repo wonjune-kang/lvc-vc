@@ -31,7 +31,7 @@ pip install -r requirements.txt
 
 Create a directory called ```weights``` in the working directory, and save the pretrained weights from the Google Drive link. We include pre-trained weights for Fast ResNet-34, ECAPA-TDNN, LVC-VC, and LVC-VC XL.
 
-**[Link](https://drive.google.com/drive/folders/1ZaiJS-dXaTJnZbxuHV_sFB0IgZ42yS4F?usp=sharing)**
+**[Google Drive Link](https://drive.google.com/drive/folders/1ZaiJS-dXaTJnZbxuHV_sFB0IgZ42yS4F?usp=sharing)**
 
 ## Data preprocessing
 
