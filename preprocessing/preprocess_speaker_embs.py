@@ -44,7 +44,7 @@ def load_ecapa_tdnn(checkpoint_path, device):
 
 
 # Set GPU index.
-gpu_idx = 1
+gpu_idx = 0
 device = torch.device(f"cuda:{gpu_idx}" if torch.cuda.is_available() else "cpu")
 
 # Choose model type. 0 for Fast ResNet-34, 1 for ECAPA-TDNN.
@@ -68,10 +68,6 @@ else:
 # For each speaker in VCTK dataset, fit Gaussian to the speaker's utterances
 data_dir = "/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/wav16"
 speakers = os.listdir(data_dir)
-
-# # We want to fit the GMMs only on the seen speakers' training utterances.
-# train_utts_file = "/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/seen_speakers_train_utts.pkl"
-# seen_speaker_train_utts = pickle.load(open(train_utts_file, 'rb'))
 
 # Extract speaker embeddings.
 avg_speaker_embs = {}
