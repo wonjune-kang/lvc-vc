@@ -180,7 +180,7 @@ class LVC_VC_Inference():
         
         # Perform conversion and rescale power to match source.
         vc_audio = self.lvc_vc(content_feature, noise, speaker_feature).detach().squeeze().cpu().numpy()
-        # vc_audio = rescale_power(source_audio, vc_audio)
+        vc_audio = rescale_power(source_audio, vc_audio)
 
         return vc_audio
 
@@ -222,7 +222,16 @@ if __name__ == '__main__':
     target_audio = load_and_resample(args.target_file, hp.audio.sampling_rate)
 
     # Run voice conversion and write file.
-    vc_audio = lvc_vc_inferencer.run_inference(source_audio, target_audio)
+    # By setting source_seen=False and target_seen=False, we are running
+    # inference as if both source and target speakers were unseen (zero-shot).
+    vc_audio = lvc_vc_inferencer.run_inference(
+        source_audio=source_audio,
+        target_audio=target_audio,
+        source_seen=False,
+        target_seen=False,
+        source_id=None,
+        target_id=None
+    )
     wavfile.write(args.output_file, hp.audio.sampling_rate, vc_audio)
     
     print(f"Converted audio written to {args.output_file}.")
