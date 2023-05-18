@@ -8,7 +8,7 @@ Additionally, it includes code for a larger, improved version of our model (not 
 
 Audio samples are available on our [demo page](https://lvc-vc.github.io/lvc-vc-demo/).
 
-If you find this work useful or use our code, please consider citing our paper:
+If you find this work or our code useful, please consider citing our paper:
 
 ```
 @article{kang2022end,
@@ -21,7 +21,7 @@ If you find this work useful or use our code, please consider citing our paper:
 
 ## Prerequisites
 
-In a fresh environment, you can install all dependencies by running
+You can install all dependencies by running
 
 ```
 pip install -r requirements.txt
@@ -29,7 +29,7 @@ pip install -r requirements.txt
 
 ## Pre-trained model weights
 
-Create a directory called ```weights``` in the working directory, and save the pretrained weights from the Google Drive link. We include pre-trained weights for Fast ResNet-34, ECAPA-TDNN, LVC-VC, and LVC-VC XL.
+Create a directory called ```weights``` in the working directory, and save the pretrained weights from the Google Drive link. We include pre-trained weights for LVC-VC, Fast ResNet-34, LVC-VC XL, and ECAPA-TDNN.
 
 **[Google Drive Link](https://drive.google.com/drive/folders/1ZaiJS-dXaTJnZbxuHV_sFB0IgZ42yS4F?usp=sharing)**
 
@@ -44,10 +44,10 @@ If you want to train a model from scratch, you will need to download the [VCTK d
 to preprocess all the data. This script will:
 
 1. Resample all audio in VCTK from 48 kHz to 16 kHz
-2. Extract F0 metadata (log F0 median and standard deviation) for each speaker and save them as a dictionary ```{speaker_id: {'median': --, 'std': --}}``` in pickle format.
+2. Extract F0 metadata (log F0 median and standard deviation) for each speaker and save them as a dictionary ```{speaker_id: {'median': --, 'std': --}}``` in pickle format
 3. Extract spectrograms and normalized F0 contours (two sets of F0 contours will be extracted, matching the window and hops for spectrograms and XLSR-53 features)
 4. Split the data into 99 seen and 10 unseen speakers, and then further split the seen speakers' utterances into train and test sets in a 9:1 ratio
-5. Extract speaker embeddings from either Fast ResNet-34 or ECAPA-TDNN (depending on the config file specified), fit Gaussians for each speaker's embeddings, and save them as a dictionary ```{'speaker_id': sklearn.mixture.GaussianMixture object}``` in pickle format.
+5. Extract speaker embeddings from either Fast ResNet-34 or ECAPA-TDNN (depending on the config file specified), fit Gaussians for each speaker's embeddings, and save them as a dictionary ```{'speaker_id': sklearn.mixture.GaussianMixture object}``` in pickle format
 
 **Note that the preprocessing scripts have directories and file paths hardcoded in. Therefore, you will need to go in and change them as needed if running on your own machine.** The script will also extract and preprocess data needed for both the base and XL versions of LVC-VC. If you are only interested in training one or the other, then comment out the corresponding parts of the code as needed.
 
