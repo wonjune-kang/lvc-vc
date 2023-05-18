@@ -4,7 +4,7 @@
 
 This repository contains code for LVC-VC, a zero-shot voice conversion model described in our Interspeech 2023 paper, [End-to-End Zero-Shot Voice Conversion with Location-Variable Convolutions](https://arxiv.org/abs/2205.09784), implemented in PyTorch.
 
-Additionally, it includes code for a larger, improved version of our model (not described in the paper), which we call **LVC-VC XL**. This version of the model utilizes embeddings from [XLSR-53](https://arxiv.org/abs/2006.13979) as content features, and uses information perturbation to extract only linguistic information from them (as done in [NANSY](https://arxiv.org/abs/2110.14513)). Additionally, it uses speaker embeddings from [ECAPA-TDNN](https://arxiv.org/abs/2005.07143) rather than [Fast ResNet-34](https://arxiv.org/abs/2003.11982). LVC-VC XL achieves significantly better performance over the base version of our model in terms of both intelligibility and voice style transfer performance, and we encourage you to use it rather than the base version if memory and compute allow.
+Additionally, it includes code for a larger, improved version of our model (not described in the paper), which we call **LVC-VC XL**. This version of the model utilizes embeddings from [XLSR-53](https://arxiv.org/abs/2006.13979) as content features, and uses information perturbation to extract only linguistic information from them (as done in [NANSY](https://arxiv.org/abs/2110.14513)). It also uses speaker embeddings from [ECAPA-TDNN](https://arxiv.org/abs/2005.07143) rather than [Fast ResNet-34](https://arxiv.org/abs/2003.11982). LVC-VC XL achieves significantly better performance over the base version of our model in terms of both intelligibility and voice style transfer performance, and we encourage you to use it rather than the base version if memory and compute allow.
 
 Audio samples are available on our [demo page](https://lvc-vc.github.io/lvc-vc-demo/).
 
@@ -31,7 +31,7 @@ pip install -r requirements.txt
 
 Create a directory called ```weights``` in the working directory, and save the pretrained weights from the Google Drive link. We include pre-trained weights for Fast ResNet-34, ECAPA-TDNN, LVC-VC, and LVC-VC XL.
 
-**TODO**
+**[Link](https://drive.google.com/drive/folders/1ZaiJS-dXaTJnZbxuHV_sFB0IgZ42yS4F?usp=sharing)**
 
 ## Data preprocessing
 
