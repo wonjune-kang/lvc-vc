@@ -68,7 +68,7 @@ If you are training the base version of LVC-VC using spectrograms as content fea
 
 ## Inference
 
-Depending on which version of the model you are using, run either ```inference_wav2vec.py``` or ```inference_spect.py```.
+Depending on which version of the model you are using, run either ```inference_wav2vec.py``` or ```inference_spect.py```. If you are running ```inference_wav2vec.py``` without having run the data preprocessing first, you can use the metadata pickle files in the ```metadata``` directory of this repository.
 
 ```
 python3 inference_wav2vec.py \
