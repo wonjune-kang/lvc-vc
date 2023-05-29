@@ -212,8 +212,8 @@ if __name__ == '__main__':
         hp=hp,
         lvc_vc_chkpt=args.lvc_vc_weights,
         speaker_encoder_chkpt=args.se_weights,
-        seen_speaker_emb_gmms_pkl='/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/ecapa_tdnn_emb_gmms_all.pkl',
-        seen_speaker_f0_metadata_pkl='/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata_orig/speaker_f0_metadata.pkl',
+        seen_speaker_emb_gmms_pkl='metadata/ecapa_tdnn_emb_gmms_all.pkl',
+        seen_speaker_f0_metadata_pkl='metadata_orig/speaker_f0_metadata.pkl',
         device=device
     )
 
