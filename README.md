@@ -11,11 +11,13 @@ Audio samples are available on our [demo page](https://lvc-vc.github.io/lvc-vc-d
 If you find this work or our code useful, please consider citing our paper:
 
 ```
-@article{kang2022end,
-  title={End-to-End Zero-Shot Voice Conversion with Location-Variable Convolutions},
-  author={Kang, Wonjune and Hasegawa-Johnson, Mark and Roy, Deb},
-  journal={arXiv preprint arXiv:2205.09784},
-  year={2022}
+@inproceedings{kang23b_interspeech,
+  author={Wonjune Kang and Mark Hasegawa-Johnson and Deb Roy},
+  title={{End-to-End Zero-Shot Voice Conversion with Location-Variable Convolutions}},
+  year=2023,
+  booktitle={Proc. INTERSPEECH 2023},
+  pages={2303--2307},
+  doi={10.21437/Interspeech.2023-2298}
 }
 ```
 
