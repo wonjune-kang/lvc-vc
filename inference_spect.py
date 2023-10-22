@@ -168,7 +168,7 @@ class LVC_VC_Inference():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str, default="config/config.yaml",
+    parser.add_argument('-c', '--config', type=str, default="config/config_spect_c16.yaml",
                         help="yaml file for configuration")
     parser.add_argument('-p', '--lvc_vc_weights', type=str, default="weights/lvc_vc_vctk.pt",
                         help="path to LVC-VC model weights")
