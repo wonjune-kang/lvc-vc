@@ -1,18 +1,17 @@
 import os
 import pickle
-from tqdm import tqdm
-import numpy as np
-from sklearn import mixture
+import sys
 
+import numpy as np
 import torch
 import torchaudio
-import torch.nn.functional as F
+from sklearn import mixture
+from tqdm import tqdm
 
-import sys
 sys.path.append("../")
-from utils.utils import *
-from model.ResNetSE34L import MainModel as ResNetModel
 from model.ecapa_tdnn import ECAPA_TDNN
+from model.ResNetSE34L import MainModel as ResNetModel
+from utils.utils import *
 
 
 def load_resnet_encoder(checkpoint_path, device):
@@ -23,11 +22,12 @@ def load_resnet_encoder(checkpoint_path, device):
     for k, v in checkpoint.items():
         try:
             new_state_dict[k[6:]] = checkpoint[k]
-        except:
+        except KeyError:
             new_state_dict[k] = v
 
     model.load_state_dict(new_state_dict)
     return model
+
 
 def load_ecapa_tdnn(checkpoint_path, device):
     ecapa_tdnn = ECAPA_TDNN(C=1024).eval().to(device)
@@ -81,21 +81,21 @@ for speaker_id in tqdm(speakers):
         utt_path = os.path.join(speaker_utt_path, utt)
         utt_audio, sr = torchaudio.load(utt_path)
         utt_audio = utt_audio.to(device)
-        
+
         if model_type == 0:
             utt_emb = speaker_encoder(utt_audio).detach().cpu().squeeze().numpy()
         elif model_type == 1:
             utt_emb = speaker_encoder(utt_audio, aug=False).detach().cpu().squeeze().numpy()
         else:
             raise Exception("Invalid model type.")
-        
+
         utt_embeddings.append(utt_emb)
-    
+
     utt_embeddings = np.stack(utt_embeddings)
-    
+
     gmm_dvector = mixture.GaussianMixture(n_components=1, covariance_type="diag")
     gmm_dvector.fit(utt_embeddings)
-    
+
     # Dictionary mapping from speaker IDs to (fixed) average speaker embeddings.
     avg_speaker_embs[speaker_id] = np.mean(utt_embeddings, axis=0)
 

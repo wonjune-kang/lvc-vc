@@ -1,14 +1,22 @@
-import os
 import argparse
+
 import numpy as np
-from scipy.io import wavfile
 import torch
 from omegaconf import OmegaConf
+from scipy.io import wavfile
 
-from utils.stft import TacotronSTFT
-from model.ResNetSE34L import MainModel as ResNetModel
 from model.generator import Generator as LVC_VC
-from utils.utils import *
+from model.ResNetSE34L import MainModel as ResNetModel
+from utils.stft import TacotronSTFT
+from utils.utils import (
+    extract_f0_median_std,
+    extract_mel_spectrogram,
+    get_f0_norm,
+    load_and_resample,
+    lowquef_lifter,
+    quantize_f0_median,
+    rescale_power,
+)
 
 
 def load_resnet_encoder(checkpoint_path, device):
@@ -19,12 +27,13 @@ def load_resnet_encoder(checkpoint_path, device):
     for k, v in checkpoint.items():
         try:
             new_state_dict[k[6:]] = checkpoint[k]
-        except:
+        except KeyError:
             new_state_dict[k] = v
 
     model.load_state_dict(new_state_dict)
 
     return model
+
 
 def load_lvc_vc(checkpoint_path, hp, device):
     model = LVC_VC(hp).to(device)
@@ -35,22 +44,23 @@ def load_lvc_vc(checkpoint_path, hp, device):
     for k, v in saved_state_dict.items():
         try:
             new_state_dict[k] = saved_state_dict['module.' + k]
-        except:
+        except KeyError:
             new_state_dict[k] = v
 
     model.load_state_dict(new_state_dict)
     model.eval(inference=True)
-    
+
     return model
 
 
 class LVC_VC_Inference():
-    def __init__(self,
+    def __init__(
+            self,
             hp,
             lvc_vc_chkpt,
             speaker_encoder_chkpt,
             device
-        ):
+    ):
 
         # Model hyperparameters.
         self.hp = hp
@@ -108,7 +118,7 @@ class LVC_VC_Inference():
         )
 
         # Transpose to make (257, N) and crop last sample at end to match spectrogram.
-        f0_norm = f0_norm.T[:,:source_spect.shape[1]].astype(np.float32)
+        f0_norm = f0_norm.T[:, :source_spect.shape[1]].astype(np.float32)
 
         # Extract target speaker's quantized median F0.
         target_f0_median, _ = extract_f0_median_std(
@@ -118,7 +128,7 @@ class LVC_VC_Inference():
             self.hop_length
         )
         target_f0_median = quantize_f0_median(target_f0_median).astype(np.float32)
-        
+
         # Extract target speaker's speaker embedding.
         target_audio = torch.from_numpy(target_audio).unsqueeze(0).to(self.device)
         target_emb = self.speaker_encoder(target_audio).cpu()
@@ -132,7 +142,7 @@ class LVC_VC_Inference():
         }
 
         return vc_features
-    
+
     def run_inference(self, source_audio, target_audio):
         # Extract all features needed for conversion.
         vc_features = self.extract_features(source_audio, target_audio)
@@ -146,9 +156,11 @@ class LVC_VC_Inference():
         noise = torch.randn(1, self.hp.gen.noise_dim, source_lq_spect.size(2)).to(self.device)
         content_feature = torch.cat((source_lq_spect, source_f0_norm), dim=1).to(self.device)
         speaker_feature = torch.cat((target_emb, target_f0_median), dim=1).to(self.device)
-        
+
         # Perform conversion and rescale power to match source.
-        vc_audio = self.lvc_vc(content_feature, noise, speaker_feature).detach().squeeze().cpu().numpy()
+        vc_audio = self.lvc_vc(
+            content_feature, noise, speaker_feature
+        ).detach().squeeze().cpu().numpy()
         vc_audio = rescale_power(source_audio, vc_audio)
 
         return vc_audio
@@ -191,5 +203,5 @@ if __name__ == '__main__':
     # Run voice conversion and write file.
     vc_audio = lvc_vc_inferencer.run_inference(source_audio, target_audio)
     wavfile.write(args.output_file, hp.audio.sampling_rate, vc_audio)
-    
+
     print(f"Converted audio written to {args.output_file}.")

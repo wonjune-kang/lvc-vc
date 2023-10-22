@@ -1,14 +1,12 @@
 import math
 import random
 
-import librosa
 import numpy as np
 import parselmouth
 import scipy
 import scipy.signal
 import torch
 import torchaudio.functional as AF
-
 
 PRAAT_CHANGEGENDER_PITCHMEDIAN_DEFAULT = 0.0
 PRAAT_CHANGEGENDER_FORMANTSHIFTRATIO_DEFAULT = 1.0
@@ -18,7 +16,7 @@ PRAAT_CHANGEGENDER_DURATIONFACTOR_DEFAULT = 1.0
 
 
 class FrequencyWarp():
-    
+
     def __init__(self, compress_overlap_bins=2):
         self.overlap_bins = compress_overlap_bins
 
@@ -28,18 +26,18 @@ class FrequencyWarp():
 
         end_idx = int(spect.shape[0]*compress_ratio)
         # num_zeros = spect.shape[0] - end_idx + self.overlap_bins
-        
+
         y_new = np.zeros(spect.shape)
         for i in range(spect.shape[1]):
-            y = spect[:,i]
-            f = scipy.interpolate.interp1d(x, y, kind='cubic')            
+            y = spect[:, i]
+            f = scipy.interpolate.interp1d(x, y, kind='cubic')
             y_new[:end_idx, i] = f(x_new)
-        
-        last_bins = spect[-10:,:]
-        filler_shape = y_new[end_idx-self.overlap_bins:,:].shape
+
+        last_bins = spect[-10:, :]
+        filler_shape = y_new[end_idx-self.overlap_bins:, :].shape
         noise = np.random.normal(np.mean(last_bins), np.std(last_bins), filler_shape)
-        
-        y_new[end_idx-self.overlap_bins:,:] = noise
+
+        y_new[end_idx-self.overlap_bins:, :] = noise
 
         return y_new
 
@@ -49,7 +47,7 @@ class FrequencyWarp():
 
         y_new = np.zeros(spect.shape)
         for i in range(spect.shape[1]):
-            y = spect[:,i]
+            y = spect[:, i]
             f = scipy.interpolate.interp1d(x, y, kind='cubic')
             y_new[:int(spect.shape[0]), i] = f(x_new)
 
@@ -66,12 +64,15 @@ class FrequencyWarp():
         return warped_spectrum.astype(np.float32)
 
 
-
 def wav_to_Sound(wav, sampling_frequency: int = 16000) -> parselmouth.Sound:
     r""" load wav file to parselmouth Sound file
 
     # __init__(self: parselmouth.Sound, other: parselmouth.Sound) -> None \
-    # __init__(self: parselmouth.Sound, values: numpy.ndarray[numpy.float64], sampling_frequency: Positive[float] = 44100.0, start_time: float = 0.0) -> None \
+    # __init__(
+    #     self: parselmouth.Sound,
+    #     values: numpy.ndarray[numpy.float64],
+    #     sampling_frequency: Positive[float] = 44100.0, start_time: float = 0.0
+    # ) -> None \
     # __init__(self: parselmouth.Sound, file_path: str) -> None
 
     returns:
@@ -168,7 +169,9 @@ def apply_formant_and_pitch_shift(
             new_pitch_median = pitch_median * pitch_shift_ratio
 
             # https://github.com/praat/praat/issues/1926#issuecomment-974909408
-            pitch_minimum = parselmouth.praat.call(pitch, "Get minimum", 0.0, 0.0, "Hertz", "Parabolic")
+            pitch_minimum = parselmouth.praat.call(
+                pitch, "Get minimum", 0.0, 0.0, "Hertz", "Parabolic"
+            )
             newMedian = pitch_median * pitch_shift_ratio
             scaledMinimum = pitch_minimum * pitch_shift_ratio
             resultingMinimum = newMedian + (scaledMinimum - newMedian) * pitch_range_ratio
@@ -353,7 +356,15 @@ def peaking_coeffs(dBgain, cutoff_freq, sample_rate, Q):
     return b0, b1, b2, a0, a1, a2
 
 
-def apply_iir_filter(wav: torch.Tensor, ftype, dBgain, cutoff_freq, sample_rate, Q, torch_backend=True):
+def apply_iir_filter(
+        wav: torch.Tensor,
+        ftype,
+        dBgain,
+        cutoff_freq,
+        sample_rate,
+        Q,
+        torch_backend=True
+):
     if ftype == 'low':
         b0, b1, b2, a0, a1, a2 = lowShelf_coeffs(dBgain, cutoff_freq, sample_rate, Q)
     elif ftype == 'high':

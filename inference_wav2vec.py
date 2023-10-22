@@ -1,16 +1,22 @@
-import os
-import pickle
 import argparse
+import pickle
+
 import numpy as np
-from scipy.io import wavfile
 import torch
 from omegaconf import OmegaConf
-
+from scipy.io import wavfile
 from transformers import Wav2Vec2ForPreTraining
+
 from model.ecapa_tdnn import ECAPA_TDNN
 from model.generator import Generator as LVC_VC
-from utils.utils import *
-from utils.perturbations import *
+from utils.perturbations import formant_and_pitch_shift, peq, wav_to_Sound
+from utils.utils import (
+    extract_f0_median_std,
+    get_f0_norm,
+    load_and_resample,
+    quantize_f0_median,
+    rescale_power,
+)
 
 
 def load_ecapa_tdnn(checkpoint_path, device):
@@ -26,9 +32,13 @@ def load_ecapa_tdnn(checkpoint_path, device):
     ecapa_tdnn.load_state_dict(new_state_dict)
     return ecapa_tdnn
 
+
 def load_wav2vec2(device):
-    wav2vec2 = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-large-xlsr-53").eval().to(device)
+    wav2vec2 = Wav2Vec2ForPreTraining.from_pretrained(
+        "facebook/wav2vec2-large-xlsr-53"
+    ).eval().to(device)
     return wav2vec2
+
 
 def load_lvc_vc(checkpoint_path, hp, device):
     model = LVC_VC(hp).to(device)
@@ -39,12 +49,12 @@ def load_lvc_vc(checkpoint_path, hp, device):
     for k, v in saved_state_dict.items():
         try:
             new_state_dict[k] = saved_state_dict['module.' + k]
-        except:
+        except KeyError:
             new_state_dict[k] = v
 
     model.load_state_dict(new_state_dict)
     model.eval(inference=True)
-    
+
     return model
 
 
@@ -57,7 +67,7 @@ class LVC_VC_Inference():
             seen_speaker_emb_gmms_pkl,
             seen_speaker_f0_metadata_pkl,
             device
-        ):
+    ):
 
         # Model hyperparameters.
         self.hp = hp
@@ -92,19 +102,27 @@ class LVC_VC_Inference():
         sound = wav_to_Sound(wav, sampling_frequency=self.hp.audio.sampling_rate)
         sound = formant_and_pitch_shift(sound)
         perturbed_wav = sound.values[0]
-        
+
         return perturbed_wav.astype(np.float32)
 
-    def extract_features(self, source_audio, target_audio, source_seen, target_seen, source_id, target_id):
+    def extract_features(
+            self,
+            source_audio,
+            target_audio,
+            source_seen,
+            target_seen,
+            source_id,
+            target_id
+    ):
         source_audio_tensor = torch.from_numpy(source_audio).unsqueeze(0).to(self.device)
         target_audio_tensor = torch.from_numpy(target_audio).unsqueeze(0).to(self.device)
 
         with torch.no_grad():
             # Extract wav2vec 2.0 features.
             wav2vec2_outputs = self.wav2vec2(source_audio_tensor, output_hidden_states=True)
-            wav2vec2_feat = wav2vec2_outputs.hidden_states[12] # (1, N, 1024)
-            wav2vec2_feat = wav2vec2_feat.permute((0,2,1)) # (1, 1024, N)
-            wav2vec2_feat = wav2vec2_feat.detach().squeeze().cpu().numpy() # (1024, N)
+            wav2vec2_feat = wav2vec2_outputs.hidden_states[12]  # (1, N, 1024)
+            wav2vec2_feat = wav2vec2_feat.permute((0, 2, 1))  # (1, 1024, N)
+            wav2vec2_feat = wav2vec2_feat.detach().squeeze().cpu().numpy()  # (1024, N)
 
         # Extract source utterance's normalized F0 contour.
         if source_seen:
@@ -122,18 +140,20 @@ class LVC_VC_Inference():
             src_f0_median,
             src_f0_std,
             self.fs,
-            int(16000*0.025), # frame length of wav2vec 2.0
-            int(16000*0.02), # hop length of wav2vec 2.0
+            int(16000*0.025),  # frame length of wav2vec 2.0
+            int(16000*0.02),  # hop length of wav2vec 2.0
         )
 
         # Transpose to make (257, N) and crop at end to match wav2vec features.
-        f0_norm = f0_norm.T[:,:wav2vec2_feat.shape[1]].astype(np.float32)
+        f0_norm = f0_norm.T[:, :wav2vec2_feat.shape[1]].astype(np.float32)
 
         # Extract target speaker's speaker embedding.
         if target_seen:
-            target_emb = self.seen_speaker_emb_gmms[target_id].means_.astype(np.float32)[0,:]
+            target_emb = self.seen_speaker_emb_gmms[target_id].means_.astype(np.float32)[0, :]
         else:
-            target_emb = self.speaker_encoder(target_audio_tensor, aug=False).detach().squeeze().cpu().numpy()
+            target_emb = self.speaker_encoder(
+                target_audio_tensor, aug=False
+            ).detach().squeeze().cpu().numpy()
 
         # Extract target speaker's quantized median F0.
         if target_seen:
@@ -156,8 +176,16 @@ class LVC_VC_Inference():
         }
 
         return vc_features
-    
-    def run_inference(self, source_audio, target_audio, source_seen, target_seen, source_id, target_id):
+
+    def run_inference(
+            self,
+            source_audio,
+            target_audio,
+            source_seen,
+            target_seen,
+            source_id,
+            target_id
+    ):
         # Extract all features needed for conversion.
         vc_features = self.extract_features(
             source_audio,
@@ -177,9 +205,11 @@ class LVC_VC_Inference():
         noise = torch.randn(1, self.hp.gen.noise_dim, source_wav2vec2_feat.size(2)).to(self.device)
         content_feature = torch.cat((source_wav2vec2_feat, source_f0_norm), dim=1).to(self.device)
         speaker_feature = torch.cat((target_emb, target_f0_median), dim=1).to(self.device)
-        
+
         # Perform conversion and rescale power to match source.
-        vc_audio = self.lvc_vc(content_feature, noise, speaker_feature).detach().squeeze().cpu().numpy()
+        vc_audio = self.lvc_vc(
+            content_feature, noise, speaker_feature
+        ).detach().squeeze().cpu().numpy()
         vc_audio = rescale_power(source_audio, vc_audio)
 
         return vc_audio
@@ -187,9 +217,10 @@ class LVC_VC_Inference():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str, default="config/config.yaml",
+    parser.add_argument('-c', '--config', type=str, default="config/config_wav2vec_ecapa_c32.yaml",
                         help="yaml file for configuration")
-    parser.add_argument('-p', '--lvc_vc_weights', type=str, default="weights/lvc_vc_wav2vec_ecapa.pt",
+    parser.add_argument('-p', '--lvc_vc_weights', type=str,
+                        default="weights/lvc_vc_wav2vec_ecapa.pt",
                         help="path to LVC-VC model weights")
     parser.add_argument('-e', '--se_weights', type=str, default="weights/ecapa_tdnn_pretrained.pt",
                         help="path to speaker encoder model weights")
@@ -213,7 +244,7 @@ if __name__ == '__main__':
         lvc_vc_chkpt=args.lvc_vc_weights,
         speaker_encoder_chkpt=args.se_weights,
         seen_speaker_emb_gmms_pkl='metadata/ecapa_tdnn_emb_gmms_all.pkl',
-        seen_speaker_f0_metadata_pkl='metadata_orig/speaker_f0_metadata.pkl',
+        seen_speaker_f0_metadata_pkl='metadata/speaker_f0_metadata.pkl',
         device=device
     )
 
@@ -233,5 +264,5 @@ if __name__ == '__main__':
         target_id=None
     )
     wavfile.write(args.output_file, hp.audio.sampling_rate, vc_audio)
-    
+
     print(f"Converted audio written to {args.output_file}.")

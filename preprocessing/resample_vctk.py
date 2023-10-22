@@ -1,12 +1,12 @@
 import os
-from tqdm import tqdm
+import sys
+
 import numpy as np
 from scipy.io import wavfile
+from tqdm import tqdm
 
-import sys
 sys.path.append("../")
 from utils.utils import load_and_resample
-
 
 fs = 16000
 wav_dir = "../data/VCTK-Corpus/VCTK-Corpus/wav48"

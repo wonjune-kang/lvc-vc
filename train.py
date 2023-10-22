@@ -1,28 +1,29 @@
-import os
-import time
+import itertools
 import logging
 import math
-import itertools
-from tqdm import tqdm
+import os
+import time
+
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 from transformers import Wav2Vec2ForPreTraining
 
 from dataset import create_dataloader
-from utils.writer import MyWriter
-from utils.stft import TacotronSTFT
-from utils.stft_loss import MultiResolutionSTFTLoss
-from model.generator import Generator
 from model.discriminator import Discriminator
+from model.generator import Generator
 from model.ResNetBlocks import SEBasicBlock
 from model.ResNetSE34L import ResNetSE
 from model.ssc import SpeakerSimilarityCriterion
+from utils.stft import TacotronSTFT
+from utils.stft_loss import MultiResolutionSTFTLoss
 from utils.utils import get_commit_hash
+from utils.writer import MyWriter
 from validation import validate
 
 
 def train(args, hp, hp_str):
-    
+
     init_epoch = -1
     step = 0
 
@@ -80,14 +81,12 @@ def train(args, hp, hp_str):
     optim_g = torch.optim.AdamW(
         model_g.parameters(),
         lr=hp.train.adam.lr,
-        betas=(hp.train.adam.beta1,
-        hp.train.adam.beta2)
+        betas=(hp.train.adam.beta1, hp.train.adam.beta2)
     )
     optim_d = torch.optim.AdamW(
         model_d.parameters(),
         lr=hp.train.adam.lr,
-        betas=(hp.train.adam.beta1,
-        hp.train.adam.beta2)
+        betas=(hp.train.adam.beta1, hp.train.adam.beta2)
     )
 
     # Load model weights from checkpoint if specified.
@@ -130,10 +129,19 @@ def train(args, hp, hp_str):
     if device == torch.device(f"cuda:{args.gpu_idx}"):
         if hp.train.num_gpus > 1:
             assert torch.cuda.device_count() >= hp.train.num_gpus
-            model_g = nn.DataParallel(model_g, device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus)))
-            model_d = nn.DataParallel(model_d, device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus)))
+            model_g = nn.DataParallel(
+                model_g,
+                device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus))
+            )
+            model_d = nn.DataParallel(
+                model_d,
+                device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus))
+            )
             if hp.train.use_wav2vec:
-                wav2vec2 = nn.DataParallel(wav2vec2, device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus)))
+                wav2vec2 = nn.DataParallel(
+                    wav2vec2,
+                    device_ids=list(range(args.gpu_idx, args.gpu_idx+hp.train.num_gpus))
+                )
 
     # Send models to device.
     model_g = model_g.to(device)
@@ -142,10 +150,12 @@ def train(args, hp, hp_str):
         wav2vec2 = wav2vec2.to(device)
 
     if hp.train.use_ssc:
-        speaker_encoder = ResNetSE(SEBasicBlock,
-                                   hp.ssc.se.layers,
-                                   hp.ssc.se.num_filters,
-                                   hp.ssc.se.spk_emb_dim)
+        speaker_encoder = ResNetSE(
+            SEBasicBlock,
+            hp.ssc.se.layers,
+            hp.ssc.se.num_filters,
+            hp.ssc.se.spk_emb_dim
+        )
         speaker_encoder.load_pretrained(hp.ssc.se.pretrained_weight_path)
         print("Loaded pretrained ResNet speaker encoder.")
 
@@ -156,9 +166,9 @@ def train(args, hp, hp_str):
     # If not consistent, it'll horribly slow down.
     torch.backends.cudnn.benchmark = True
 
-    ####################
-    ##### Training #####
-    ####################
+    ############
+    # Training #
+    ############
     start_step = step
 
     model_g.train()
@@ -195,16 +205,16 @@ def train(args, hp, hp_str):
                 perturbed_audio = perturbed_audios[0].to(device)
                 with torch.no_grad():
                     wav2vec2_outputs = wav2vec2(perturbed_audio, output_hidden_states=True)
-                feat = wav2vec2_outputs.hidden_states[12] # (B, N, 1024)
-                feat = feat.permute((0,2,1)) # (B, 1024, N)
-            
+                feat = wav2vec2_outputs.hidden_states[12]  # (B, N, 1024)
+                feat = feat.permute((0, 2, 1))  # (B, 1024, N)
+
             # Or use low-quefrency liftered mel spectrogram.
             else:
-                feat = spects[0].to(device) # (B, 80, N)
+                feat = spects[0].to(device)  # (B, 80, N)
 
-            #####################
-            ##### Generator #####
-            #####################
+            #############
+            # Generator #
+            #############
             optim_g.zero_grad()
 
             # Perform self-reconstruction of audio.
@@ -215,13 +225,13 @@ def train(args, hp, hp_str):
             # Crop all audio to be the length of the shortest signal (in case of
             # slight mismatches when upsampling input noise sequence).
             min_size = min(audio.size(2), fake_audio.size(2))
-            audio = audio[:,:,:min_size]
-            fake_audio = fake_audio[:,:,:min_size]
+            audio = audio[:, :, :min_size]
+            fake_audio = fake_audio[:, :, :min_size]
 
             # Compute Multi-Resolution STFT Loss.
             # (spectral convergence loss + log STFT magnitude loss)
             sc_loss, mag_loss = stft_criterion(fake_audio.squeeze(1), audio.squeeze(1))
-            
+
             stft_lamb = hp.train.stft_lamb
             stft_loss = (sc_loss + mag_loss) * stft_lamb
 
@@ -252,15 +262,33 @@ def train(args, hp, hp_str):
                     source_f0_norm = f0_norms[i].to(device)
 
                     content_feature = torch.cat((source_spect, source_f0_norm), dim=1)
-                    noise = torch.randn(hp.train.batch_size, hp.gen.noise_dim, source_spect.size(2)).to(device)
+                    noise = torch.randn(
+                        hp.train.batch_size,
+                        hp.gen.noise_dim,
+                        source_spect.size(2)
+                    ).to(device)
 
-                    fake_ssc_audio = model_g(content_feature, noise, vc_target_speaker_feat).squeeze(1)
+                    fake_ssc_audio = model_g(
+                        content_feature,
+                        noise,
+                        vc_target_speaker_feat
+                    ).squeeze(1)
                     fake_ssc_audios.append(fake_ssc_audio)
 
-                pos_ssc_loss, neg_ssc_loss = ssc_criterion(fake_ssc_audios, src_audios, vc_target_speaker_feat[:,:hp.ssc.se.spk_emb_dim])
-                
-                pos_ssc_lamb = min(hp.ssc.pos_ssc_lamb, hp.ssc.pos_ssc_lamb * ((step-start_step) / hp.ssc.ssc_annealing_step)) # len(loader)
-                neg_ssc_lamb = min(hp.ssc.neg_ssc_lamb, hp.ssc.neg_ssc_lamb * ((step-start_step) / hp.ssc.ssc_annealing_step)) # len(loader)
+                pos_ssc_loss, neg_ssc_loss = ssc_criterion(
+                    fake_ssc_audios,
+                    src_audios,
+                    vc_target_speaker_feat[:, :hp.ssc.se.spk_emb_dim]
+                )
+
+                pos_ssc_lamb = min(
+                    hp.ssc.pos_ssc_lamb,
+                    hp.ssc.pos_ssc_lamb * ((step-start_step) / hp.ssc.ssc_annealing_step)
+                )  # len(loader)
+                neg_ssc_lamb = min(
+                    hp.ssc.neg_ssc_lamb,
+                    hp.ssc.neg_ssc_lamb * ((step-start_step) / hp.ssc.ssc_annealing_step)
+                )  # len(loader)
                 ssc_loss = (pos_ssc_lamb * pos_ssc_loss) + (neg_ssc_lamb * neg_ssc_loss)
 
                 loss_g += ssc_loss
@@ -268,9 +296,9 @@ def train(args, hp, hp_str):
             loss_g.backward()
             optim_g.step()
 
-            #########################
-            ##### Discriminator #####
-            #########################
+            #################
+            # Discriminator #
+            #################
             optim_d.zero_grad()
 
             # MRD, MPD losses.
@@ -279,7 +307,9 @@ def train(args, hp, hp_str):
 
             # Compute LSGAN loss for all frames.
             loss_d = 0.0
-            for (_, score_fake), (_, score_real) in zip(res_fake + period_fake, res_real + period_real):
+            for (_, score_fake), (_, score_real) in zip(
+                res_fake + period_fake, res_real + period_real
+            ):
                 loss_d += torch.mean(torch.pow(score_real - 1.0, 2))
                 loss_d += torch.mean(torch.pow(score_fake, 2))
 
@@ -291,9 +321,9 @@ def train(args, hp, hp_str):
 
             step += 1
 
-            ###################
-            ##### Logging #####
-            ###################
+            ###########
+            # Logging #
+            ###########
             loss_g = loss_g.item()
             loss_d = loss_d.item()
             stft_loss = stft_loss.item()
@@ -304,7 +334,9 @@ def train(args, hp, hp_str):
                     writer.log_training(loss_g, loss_d,
                                         stft_loss, score_loss,
                                         step, ssc_loss=ssc_loss)
-                    loader.set_description("g %.04f d %.04f ssc %.04f | step %d" % (loss_g, loss_d, ssc_loss, step))
+                    loader.set_description(
+                        "g %.04f d %.04f ssc %.04f | step %d" % (loss_g, loss_d, ssc_loss, step)
+                    )
 
             else:
                 if step % hp.log.summary_interval == 0:
@@ -314,8 +346,19 @@ def train(args, hp, hp_str):
 
             if hp.train.use_ssc and step % hp.log.ssc_validation_interval_steps == 0:
                 with torch.no_grad():
-                    validate(hp, model_g, model_d, wav2vec2, valloader, stft, writer, step, device, ssc=True)
-                
+                    validate(
+                        hp,
+                        model_g,
+                        model_d,
+                        wav2vec2,
+                        valloader,
+                        stft,
+                        writer,
+                        step,
+                        device,
+                        ssc=True
+                    )
+
                 save_path = os.path.join(pt_dir, '%s_%04d_%d.pt' % (args.name, epoch, step))
                 torch.save({
                     'model_g': (model_g.module if hp.train.num_gpus > 1 else model_g).state_dict(),
@@ -329,9 +372,9 @@ def train(args, hp, hp_str):
                 }, save_path)
                 logger.info("Saved checkpoint to: %s" % save_path)
 
-        ######################
-        ##### Validation #####
-        ######################
+        ##############
+        # Validation #
+        ##############
         if epoch % hp.log.validation_interval == 0:
             with torch.no_grad():
                 validate(hp, model_g, model_d, wav2vec2, valloader, stft, writer, step, device)

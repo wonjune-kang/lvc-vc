@@ -1,7 +1,6 @@
 import os
-import random
 import pickle
-
+import random
 
 random.seed(0)
 
@@ -31,7 +30,7 @@ for speaker_id in sorted(seen_speakers):
     utterances = []
     for wav_file in sorted(os.listdir(speaker_wav_dir)):
         utterances.append(os.path.join(speaker_id, wav_file))
-    
+
     seenspeakers2utterances[speaker_id] = utterances
 
 
@@ -41,7 +40,7 @@ seenspeakers2test_utts = {}
 for speaker_id, utterances in seenspeakers2utterances.items():
     split_idx = int(0.1*len(utterances))
     random.shuffle(utterances)
-    
+
     train_utts = utterances[:-split_idx]
     test_utts = utterances[-split_idx:]
 

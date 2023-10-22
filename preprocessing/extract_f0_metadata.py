@@ -1,13 +1,14 @@
 import os
 import pickle
 import random
-from tqdm import tqdm
+import sys
+
 import numpy as np
 from omegaconf import OmegaConf
+from tqdm import tqdm
 
-import sys
 sys.path.append("../")
-from utils.utils import load_and_resample, extract_utterance_log_f0
+from utils.utils import extract_utterance_log_f0, load_and_resample
 
 random.seed(0)
 
@@ -19,33 +20,37 @@ def get_speaker_utterance_paths(speaker_base_path):
     for utt_file in utterance_files:
         utt_path = os.path.join(speaker_base_path, utt_file)
         all_utterance_paths.append(utt_path)
-    
+
     return all_utterance_paths
+
 
 def find_speaker_f0_median_std(speaker_utt_path, fs, window, hop, voiced_prob_cutoff):
     frame_len_samples = int(fs * window)
     hop_len_samples = int(fs * hop)
-                             
+
     utterance_files = get_speaker_utterance_paths(speaker_utt_path)
 
     k = min(50, len(utterance_files))
     utterance_files = random.sample(utterance_files, k)
-    
+
     all_f0_vals = []
     for utt_file in tqdm(utterance_files):
         try:
             y = load_and_resample(utt_file, fs)
-            f0_vals = extract_utterance_log_f0(y, fs, frame_len_samples, hop_len_samples, voiced_prob_cutoff)
+            f0_vals = extract_utterance_log_f0(
+                y, fs, frame_len_samples, hop_len_samples, voiced_prob_cutoff
+            )
             f0_vals = f0_vals[~np.isnan(f0_vals)]
             all_f0_vals.extend(f0_vals.tolist())
         except:
             pass
-    
+
     all_f0_vals = np.array(all_f0_vals)
     f0_median = np.median(all_f0_vals).astype(np.float32)
     f0_std = np.std(all_f0_vals).astype(np.float32)
 
     return f0_median, f0_std
+
 
 def process_all_speaker_f0(speaker_directory, fs, window, hop, voiced_prob_cutoff=0.2):
     all_speakers = sorted(os.listdir(speaker_directory))
@@ -54,10 +59,14 @@ def process_all_speaker_f0(speaker_directory, fs, window, hop, voiced_prob_cutof
     for speaker_id in all_speakers:
         print(f"Processing speaker {speaker_id}...")
         speaker_utt_path = os.path.join(speaker_directory, speaker_id)
-        f0_median, f0_std = find_speaker_f0_median_std(speaker_utt_path, fs, window, hop, voiced_prob_cutoff)
+        f0_median, f0_std = find_speaker_f0_median_std(
+            speaker_utt_path, fs, window, hop, voiced_prob_cutoff
+        )
 
-        current_speaker_f0_info = {'median': f0_median,
-                                   'std': f0_std}
+        current_speaker_f0_info = {
+            'median': f0_median,
+            'std': f0_std
+        }
         all_speaker_f0_info[speaker_id] = current_speaker_f0_info
 
     return all_speaker_f0_info

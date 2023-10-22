@@ -1,11 +1,8 @@
-import os
-import numpy as np
-from sklearn.manifold import TSNE
-import torch
-from torch.utils.tensorboard import SummaryWriter
 import librosa
+import numpy as np
+from torch.utils.tensorboard import SummaryWriter
 
-from .plotting import plot_waveform_to_numpy, plot_spectrogram_to_numpy
+from .plotting import plot_spectrogram_to_numpy, plot_waveform_to_numpy
 
 
 class MyWriter(SummaryWriter):
@@ -17,7 +14,7 @@ class MyWriter(SummaryWriter):
                      ssc_loss=None, se_loss=None):
         self.add_scalar('train/g_loss', g_loss, step)
         self.add_scalar('train/d_loss', d_loss, step)
-        
+
         self.add_scalar('train/score_loss', score_loss, step)
         self.add_scalar('train/stft_loss', stft_loss, step)
 
@@ -35,10 +32,14 @@ class MyWriter(SummaryWriter):
 
     def log_fig_audio(self, target, prediction, spec_fake, spec_real, idx, step):
         if idx == 0:
-            spec_fake = librosa.amplitude_to_db(spec_fake, ref=np.max,top_db=80.)
-            spec_real = librosa.amplitude_to_db(spec_real, ref=np.max,top_db=80.)
+            spec_fake = librosa.amplitude_to_db(spec_fake, ref=np.max, top_db=80.)
+            spec_real = librosa.amplitude_to_db(spec_real, ref=np.max, top_db=80.)
             self.add_image('spec/predicted', plot_spectrogram_to_numpy(spec_fake), step)
-            self.add_image('spec/error', plot_spectrogram_to_numpy(np.power(spec_real - spec_fake, 2)), step)
+            self.add_image(
+                'spec/error',
+                plot_spectrogram_to_numpy(np.power(spec_real - spec_fake, 2)),
+                step
+            )
             self.add_image('waveform/predicted', plot_waveform_to_numpy(prediction), step)
             self.add_image('spec/target', plot_spectrogram_to_numpy(spec_real), step)
             self.add_image('waveform/target', plot_waveform_to_numpy(target), step)

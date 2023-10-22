@@ -1,14 +1,14 @@
 import os
 import pickle
-from tqdm import tqdm
-import numpy as np
-import torch
-from omegaconf import OmegaConf
-
 import sys
+
+import numpy as np
+from omegaconf import OmegaConf
+from tqdm import tqdm
+
 sys.path.append("../")
-from utils.utils import load_and_resample, extract_mel_spectrogram, get_f0_norm
 from utils.stft import TacotronSTFT
+from utils.utils import extract_mel_spectrogram, get_f0_norm, load_and_resample
 
 
 def get_speaker_utterance_paths(speaker_base_path):
@@ -18,11 +18,11 @@ def get_speaker_utterance_paths(speaker_base_path):
     for utt_file in utterance_files:
         utt_path = os.path.join(speaker_base_path, utt_file)
         all_utterance_paths.append(utt_path)
-    
+
     return all_utterance_paths
 
 
-config = '../config/config_wav2vec_ecapa_c32.yaml' # CHANGE AS NEEDED
+config = '../config/config_wav2vec_ecapa_c32.yaml'  # CHANGE AS NEEDED
 hp = OmegaConf.load(config)
 
 # Define hyperparameters.
@@ -57,7 +57,8 @@ stft = TacotronSTFT(
 )
 
 # Read all speakers' median and std F0 statistics.
-f0_metadata_file = '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl' # CHANGE AS NEEDED
+# CHANGE METADATA FILE AS NEEDED.
+f0_metadata_file = '/u/wjkang/data/VCTK-Corpus/VCTK-Corpus/metadata/speaker_f0_metadata.pkl'
 with open(f0_metadata_file, 'rb') as f:
     f0_median_std_info = pickle.load(f)
 
@@ -75,7 +76,7 @@ for speaker_id in speaker_ids:
 
     # Directory for speaker's WAV files.
     speaker_wav_directory = os.path.join(wav_dir, speaker_id)
-    
+
     # Create directories for storing utterance-wise speaker feature data.
     spect_save_dir = os.path.join(spect_dir, speaker_id)
     spect_f0_norm_save_dir = os.path.join(spect_f0_norm_dir, speaker_id)
@@ -93,8 +94,11 @@ for speaker_id in speaker_ids:
 
         # Extract mel spectrogram.
         spect = extract_mel_spectrogram(y, stft)  # (80, N)
-        np.save(os.path.join(spect_save_dir, save_filename),
-                spect.astype(np.float32), allow_pickle=False)
+        np.save(
+            os.path.join(spect_save_dir, save_filename),
+            spect.astype(np.float32),
+            allow_pickle=False
+        )
 
         # Compute and save one-hot normalized log F0.
         # Get F0 median and std dev info for current speaker.
@@ -104,17 +108,23 @@ for speaker_id in speaker_ids:
         # Extract F0 metadata matching spectrograms.
         # Get one-hot representations for normalized log F0 contour.
         f0_norm = get_f0_norm(y, f0_median, f0_std, fs, spect_window_len, spect_hop_len).T
-        
+
         # Sometimes, there is 1 more F0 frame extracted because of window
         # processing mismatches, so we crop to match the spectrogram length.
-        f0_norm = f0_norm[:, :spect.shape[1]] # (257, N)
+        f0_norm = f0_norm[:, :spect.shape[1]]  # (257, N)
 
-        np.save(os.path.join(spect_f0_norm_save_dir, save_filename),
-                f0_norm.astype(np.float32), allow_pickle=False)
-    
+        np.save(
+            os.path.join(spect_f0_norm_save_dir, save_filename),
+            f0_norm.astype(np.float32),
+            allow_pickle=False
+        )
+
         # Extract F0 metadata matching wav2vec features
         # (different window and hop length from spectrograms).
         f0_norm = get_f0_norm(y, f0_median, f0_std, fs, wav2vec_window_len, wav2vec_hop_len).T
 
-        np.save(os.path.join(wav2vec_f0_norm_save_dir, save_filename),
-                f0_norm.astype(np.float32), allow_pickle=False)
+        np.save(
+            os.path.join(wav2vec_f0_norm_save_dir, save_filename),
+            f0_norm.astype(np.float32),
+            allow_pickle=False
+        )

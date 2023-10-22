@@ -1,6 +1,6 @@
-import tqdm
 import torch
 import torch.nn.functional as F
+import tqdm
 
 
 def validate(hp, generator, discriminator, wav2vec2, valloader, stft,
@@ -14,7 +14,7 @@ def validate(hp, generator, discriminator, wav2vec2, valloader, stft,
     loader = tqdm.tqdm(valloader, desc='Validation loop')
     mel_loss = 0.0
     for idx, (audios, _, spects, speaker_feats, f0_norms) in enumerate(loader):
-        
+
         if ssc and idx == hp.log.num_audio:
             return
 
@@ -31,15 +31,15 @@ def validate(hp, generator, discriminator, wav2vec2, valloader, stft,
         # Extract wav2vec 2.0 features from audio.
         if hp.train.use_wav2vec:
             wav2vec2_outputs = wav2vec2(audio.squeeze(1), output_hidden_states=True)
-            feat = wav2vec2_outputs.hidden_states[12] # (B, N, 1024)
-            feat = feat.permute((0,2,1)) # (B, 1024, N)
+            feat = wav2vec2_outputs.hidden_states[12]  # (B, N, 1024)
+            feat = feat.permute((0, 2, 1))  # (B, 1024, N)
 
             # Crop feat or f0_norm to match shorter feature (they may be
             # off by 1 or 2 because of slight mismatches in frame-wise processing).
             min_feat_len = min(feat.size(2), f0_norm.size(2))
-            feat = feat[:,:,:min_feat_len]
-            f0_norm = f0_norm[:,:,:min_feat_len]
-        
+            feat = feat[:, :, :min_feat_len]
+            f0_norm = f0_norm[:, :, :min_feat_len]
+
         # Or use low-quefrency liftered mel spectrogram.
         else:
             feat, _ = spects
@@ -58,9 +58,9 @@ def validate(hp, generator, discriminator, wav2vec2, valloader, stft,
         # Crop all audio to be the length of the shortest signal (in case of
         # slight mismatches when upsampling input noise sequence).
         min_audio_len = min(audio.size(2), recon_audio.size(2))
-        audio = audio[:,:,:min_audio_len]
-        recon_audio = recon_audio[:,:,:min_audio_len]
-        vc_audio = vc_audio[:,:,:min_audio_len]
+        audio = audio[:, :, :min_audio_len]
+        recon_audio = recon_audio[:, :, :min_audio_len]
+        vc_audio = vc_audio[:, :, :min_audio_len]
 
         # Compute mel spectrograms for reconstructed (fake) and real audio.
         spect_fake = stft.mel_spectrogram(recon_audio.squeeze(1))
@@ -81,7 +81,7 @@ def validate(hp, generator, discriminator, wav2vec2, valloader, stft,
             spec_real = spec_real[0].cpu().detach().numpy()
             writer.log_fig_audio(audio, recon_audio, spec_fake, spec_real, idx, step)
             writer.log_fig_vc_audio(audio, audio2, vc_audio, idx, step)
-            
+
     # Compute and write average spect loss.
     mel_loss = mel_loss / len(valloader.dataset)
 
